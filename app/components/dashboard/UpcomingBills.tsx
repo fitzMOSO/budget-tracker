@@ -1,17 +1,18 @@
 'use client'
 
 import React from 'react'
-import { Card, CardHeader, CardTitle, CardContent, Badge } from '../ui'
+import { Card, CardHeader, CardTitle, CardContent, Badge, Button } from '../ui'
 import { formatCurrency, formatDate, isOverdue } from '../../utils'
-import type { Bill, AppSettings } from '../../types'
+import type { Bill, AppSettings, Account } from '../../types'
 
 interface UpcomingBillsProps {
     bills: Bill[]
     settings: AppSettings
-    onTogglePaid?: (id: string) => void
+    accounts?: Account[]
+    onPayBill?: (id: string, paidDate: string, accountId: string) => void
 }
 
-export function UpcomingBills({ bills, settings, onTogglePaid }: UpcomingBillsProps) {
+export function UpcomingBills({ bills, settings, accounts = [], onPayBill }: UpcomingBillsProps) {
     const sortedBills = [...bills]
         .filter((b) => !b.isPaid)
         .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
@@ -51,25 +52,18 @@ export function UpcomingBills({ bills, settings, onTogglePaid }: UpcomingBillsPr
                                                 </Badge>
                                             )}
                                         </div>
-                                        {onTogglePaid && (
-                                            <button
-                                                onClick={() => onTogglePaid(bill.id)}
-                                                className="w-5 h-5 rounded border-2 border-gray-300 hover:border-green-500 transition-colors flex items-center justify-center"
+                                        {onPayBill && accounts.length > 0 && (
+                                            <Button
+                                                size="sm"
+                                                variant="primary"
+                                                onClick={() => {
+                                                    const today = new Date().toISOString().split('T')[0]
+                                                    onPayBill(bill.id, today, accounts[0].id)
+                                                }}
+                                                className="text-xs px-2 py-1"
                                             >
-                                                {bill.isPaid && (
-                                                    <svg
-                                                        className="w-3 h-3 text-green-500"
-                                                        fill="currentColor"
-                                                        viewBox="0 0 20 20"
-                                                    >
-                                                        <path
-                                                            fillRule="evenodd"
-                                                            d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                                                            clipRule="evenodd"
-                                                        />
-                                                    </svg>
-                                                )}
-                                            </button>
+                                                Pay
+                                            </Button>
                                         )}
                                     </div>
                                 </div>

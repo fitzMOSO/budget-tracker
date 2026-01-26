@@ -75,21 +75,21 @@ function MonthSelector({ selectedMonth, selectedYear, onMonthChange }: MonthSele
     }
 
     return (
-        <div className="flex items-center gap-2 bg-white rounded-lg border border-gray-200 px-2 py-1">
+        <div className="flex items-center gap-1 bg-gray-50 rounded-xl border border-gray-200/80 px-1.5 py-1">
             <button
                 onClick={handlePrevMonth}
-                className="p-1 hover:bg-gray-100 rounded transition-colors"
+                className="p-1.5 hover:bg-white rounded-lg transition-all duration-200 hover:shadow-sm active:scale-95"
             >
-                <ChevronLeft className="w-4 h-4 text-gray-600" />
+                <ChevronLeft className="w-4 h-4 text-gray-500" />
             </button>
-            <span className="font-medium text-gray-900 min-w-35 text-center">
+            <span className="font-semibold text-gray-800 min-w-32 text-center text-sm">
                 {getMonthName(selectedMonth)} {selectedYear}
             </span>
             <button
                 onClick={handleNextMonth}
-                className="p-1 hover:bg-gray-100 rounded transition-colors"
+                className="p-1.5 hover:bg-white rounded-lg transition-all duration-200 hover:shadow-sm active:scale-95"
             >
-                <ChevronRight className="w-4 h-4 text-gray-600" />
+                <ChevronRight className="w-4 h-4 text-gray-500" />
             </button>
         </div>
     )
@@ -108,19 +108,19 @@ export function AppLayout({ children, selectedMonth, selectedYear, onMonthChange
     const { state } = useBudget()
 
     return (
-        <div className="min-h-screen bg-gray-50">
+        <div className="min-h-screen bg-gradient-to-br from-gray-50 via-gray-50 to-blue-50/30">
             {/* Mobile Header */}
-            <header className="lg:hidden fixed top-0 left-0 right-0 z-40 bg-white border-b border-gray-200 px-4 py-3">
+            <header className="lg:hidden fixed top-0 left-0 right-0 z-30 bg-white border-b border-gray-200 px-4 py-3">
                 <div className="flex items-center justify-between">
                     <button
                         onClick={() => setIsSidebarOpen(true)}
-                        className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg"
+                        className="p-2 text-gray-600 hover:bg-gray-100 rounded-xl transition-colors active:scale-95"
                     >
-                        <Menu className="w-6 h-6" />
+                        <Menu className="w-5 h-5" />
                     </button>
                     <div className="flex items-center gap-2">
-                        <Image src="/icons/icon-192.png" alt="Budget Tracker" width={28} height={28} className="rounded-lg" />
-                        <span className="font-bold text-gray-900">Budget Tracker</span>
+                        <Image src="/icons/icon-192.png" alt="Budget Tracker" width={28} height={28} className="rounded-xl shadow-sm" />
+                        <span className="font-bold text-gray-900 tracking-tight">Budget Tracker</span>
                     </div>
                     <div className="w-10" /> {/* Spacer */}
                 </div>
@@ -129,7 +129,7 @@ export function AppLayout({ children, selectedMonth, selectedYear, onMonthChange
             {/* Mobile Sidebar Overlay */}
             {isSidebarOpen && (
                 <div
-                    className="lg:hidden fixed inset-0 z-50 bg-black/50"
+                    className="lg:hidden fixed inset-0 z-50 bg-black/40 backdrop-blur-sm animate-fade-in"
                     onClick={() => setIsSidebarOpen(false)}
                 />
             )}
@@ -137,20 +137,26 @@ export function AppLayout({ children, selectedMonth, selectedYear, onMonthChange
             {/* Sidebar */}
             <aside
                 className={cn(
-                    'fixed top-0 left-0 z-50 h-full w-64 bg-white border-r border-gray-200 transform transition-transform duration-300 lg:translate-x-0',
+                    'fixed top-0 left-0 z-50 h-full w-72 bg-white/95 backdrop-blur-xl border-r border-gray-200/50 transform transition-transform duration-300 ease-out lg:translate-x-0 shadow-xl lg:shadow-none',
                     isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
                 )}
             >
                 <div className="flex flex-col h-full">
                     {/* Logo */}
                     <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100">
-                        <div className="flex items-center gap-2">
-                            <Image src="/icons/icon-192.png" alt="Budget Tracker" width={32} height={32} className="rounded-lg" />
-                            <span className="text-xl font-bold text-gray-900">Budget Tracker</span>
+                        <div className="flex items-center gap-3">
+                            <div className="relative">
+                                <Image src="/icons/icon-192.png" alt="Budget Tracker" width={40} height={40} className="rounded-xl shadow-md" />
+                                <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-500 rounded-full border-2 border-white" />
+                            </div>
+                            <div>
+                                <span className="text-lg font-bold text-gray-900 tracking-tight">Budget Tracker</span>
+                                <p className="text-xs text-gray-400">Manage your finances</p>
+                            </div>
                         </div>
                         <button
                             onClick={() => setIsSidebarOpen(false)}
-                            className="lg:hidden p-2 text-gray-400 hover:text-gray-600"
+                            className="lg:hidden p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
                         >
                             <X className="w-5 h-5" />
                         </button>
@@ -167,13 +173,13 @@ export function AppLayout({ children, selectedMonth, selectedYear, onMonthChange
                                             href={item.href}
                                             onClick={() => setIsSidebarOpen(false)}
                                             className={cn(
-                                                'flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-colors',
+                                                'flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-all duration-200',
                                                 isActive
-                                                    ? 'bg-blue-50 text-blue-700'
-                                                    : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                                                    ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg shadow-blue-500/25'
+                                                    : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900 active:scale-[0.98]'
                                             )}
                                         >
-                                            {item.icon}
+                                            <span className={isActive ? 'text-white' : 'text-gray-400'}>{item.icon}</span>
                                             {item.label}
                                         </Link>
                                     </li>
@@ -183,20 +189,26 @@ export function AppLayout({ children, selectedMonth, selectedYear, onMonthChange
                     </nav>
 
                     {/* Footer */}
-                    <div className="px-6 py-4 border-t border-gray-100">
-                        <p className="text-xs text-gray-500">
-                            Currency: {state.settings.currencySymbol} ({state.settings.currency})
-                        </p>
+                    <div className="px-4 py-4 border-t border-gray-100 bg-gray-50/50">
+                        <div className="flex items-center gap-3 px-3 py-2 bg-white rounded-xl border border-gray-100">
+                            <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center">
+                                <span className="text-white text-sm font-bold">{state.settings.currencySymbol}</span>
+                            </div>
+                            <div>
+                                <p className="text-xs font-medium text-gray-800">{state.settings.currency}</p>
+                                <p className="text-xs text-gray-400">Currency</p>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </aside>
 
             {/* Main Content */}
-            <main className="lg:ml-64 pt-16 lg:pt-0 pb-20 lg:pb-0">
+            <main className="lg:ml-72 pt-16 lg:pt-0 pb-20 lg:pb-0">
                 {/* Top Bar */}
-                <div className="sticky top-16 lg:top-0 z-30 bg-white border-b border-gray-200 px-4 lg:px-8 py-4">
+                <div className="sticky top-16 lg:top-0 z-20 bg-white border-b border-gray-200 px-4 lg:px-8 py-4">
                     <div className="flex items-center justify-between">
-                        <h1 className="text-xl font-semibold text-gray-900 hidden lg:block">
+                        <h1 className="text-xl font-bold text-gray-900 tracking-tight hidden lg:block">
                             {navItems.find((item) => item.href === pathname)?.label || 'Dashboard'}
                         </h1>
                         <div className="flex items-center gap-3 w-full lg:w-auto justify-between lg:justify-end">
@@ -215,8 +227,8 @@ export function AppLayout({ children, selectedMonth, selectedYear, onMonthChange
             </main>
 
             {/* Mobile Bottom Navigation */}
-            <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-gray-200 pb-safe">
-                <div className="flex items-center justify-around py-2">
+            <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-30 bg-white border-t border-gray-200 pb-safe">
+                <div className="flex items-center justify-around py-2 px-2">
                     {mobileNavItems.map((item) => {
                         const isActive = pathname === item.href
                         return (
@@ -224,20 +236,20 @@ export function AppLayout({ children, selectedMonth, selectedYear, onMonthChange
                                 key={item.href}
                                 href={item.href}
                                 className={cn(
-                                    'flex flex-col items-center gap-1 px-3 py-2 rounded-lg min-w-[60px] transition-colors',
+                                    'flex flex-col items-center gap-1 px-4 py-2 rounded-xl min-w-[64px] transition-all duration-200',
                                     isActive
-                                        ? 'text-blue-600'
-                                        : 'text-gray-500 active:bg-gray-100'
+                                        ? 'text-blue-600 bg-blue-50'
+                                        : 'text-gray-400 active:bg-gray-100 active:scale-95'
                                 )}
                             >
-                                {item.icon}
-                                <span className="text-xs font-medium">{item.label}</span>
+                                <span className={isActive ? 'scale-110 transition-transform' : ''}>{item.icon}</span>
+                                <span className={cn('text-xs font-medium', isActive && 'font-semibold')}>{item.label}</span>
                             </Link>
                         )
                     })}
                     <button
                         onClick={() => setIsSidebarOpen(true)}
-                        className="flex flex-col items-center gap-1 px-3 py-2 rounded-lg min-w-[60px] text-gray-500 active:bg-gray-100 transition-colors"
+                        className="flex flex-col items-center gap-1 px-4 py-2 rounded-xl min-w-[64px] text-gray-400 active:bg-gray-100 active:scale-95 transition-all duration-200"
                     >
                         <MoreHorizontal className="w-5 h-5" />
                         <span className="text-xs font-medium">More</span>

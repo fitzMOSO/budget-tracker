@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
 import { Plus, CheckCircle, AlertCircle, Clock } from 'lucide-react'
 import { AppLayout } from '../components/AppLayout'
 import {
@@ -28,7 +28,7 @@ import { showPaymentDialog, showSuccess, showDeleteConfirm, showConfirm } from '
 import type { Bill, Account, Category } from '../types'
 
 export default function BillsPage() {
-    const { state, addBill, updateBill, deleteBill, payBill, unpayBill, addExpense, isLoading } = useBudget()
+    const { state, addBill, updateBill, deleteBill, payBill, unpayBill, addExpense, generateRecurringBills, isLoading } = useBudget()
     const { month: currentMonth, year: currentYear } = getMonthYear()
     const [selectedMonth, setSelectedMonth] = useState(currentMonth)
     const [selectedYear, setSelectedYear] = useState(currentYear)
@@ -44,6 +44,13 @@ export default function BillsPage() {
         categoryId: '',
         notes: '',
     })
+
+    // Generate recurring bills when month changes or on initial load
+    useEffect(() => {
+        if (!isLoading) {
+            generateRecurringBills(selectedMonth, selectedYear)
+        }
+    }, [selectedMonth, selectedYear, isLoading, generateRecurringBills])
 
     const handleMonthChange = (month: number, year: number) => {
         setSelectedMonth(month)
@@ -158,7 +165,7 @@ export default function BillsPage() {
             )
             if (result) {
                 payBill(bill.id, getTodayISO(), result.accountId)
-                
+
                 // Also create an expense entry if the bill has a category
                 if (bill.categoryId) {
                     addExpense({
@@ -171,7 +178,7 @@ export default function BillsPage() {
                         notes: `Auto-created from bill payment`,
                     })
                 }
-                
+
                 showSuccess('Bill paid successfully!')
             }
         }
@@ -187,6 +194,37 @@ export default function BillsPage() {
         if (!categoryId) return '#6b7280'
         const category = state.categories.find((c: Category) => c.id === categoryId)
         return category?.color || '#6b7280'
+    }
+
+    const handleStopRecurring = async (bill: Bill) => {
+        // Find the source bill ID (either this bill if it's the original, or its recurringSourceId)
+        const sourceId = bill.recurringSourceId || bill.id
+        const sourceBill = state.bills.find((b: Bill) => b.id === sourceId)
+
+        if (!sourceBill) return
+
+        const confirmed = await showConfirm(
+            'Stop Recurring?',
+            'This will stop generating future bills for this recurring item. Existing bills will remain.',
+            'Yes, Stop',
+            'Cancel'
+        )
+
+        if (confirmed) {
+            // Update the source bill to not be recurring anymore
+            updateBill({ ...sourceBill, isRecurring: false })
+            showSuccess('Recurring stopped! No more future bills will be generated.')
+        }
+    }
+
+    // Check if a bill is from a recurring source (either original or generated)
+    const isFromRecurringSource = (bill: Bill) => {
+        if (bill.isRecurring) return true
+        if (bill.recurringSourceId) {
+            const source = state.bills.find((b: Bill) => b.id === bill.recurringSourceId)
+            return source?.isRecurring || false
+        }
+        return false
     }
 
     const BillCard = ({ bill }: { bill: Bill }) => {
@@ -217,6 +255,11 @@ export default function BillsPage() {
                             {bill.isRecurring && (
                                 <Badge variant="info" className="text-xs">
                                     Recurring
+                                </Badge>
+                            )}
+                            {bill.recurringSourceId && (
+                                <Badge variant="purple" className="text-xs">
+                                    From Recurring
                                 </Badge>
                             )}
                             {bill.categoryId && (
@@ -268,6 +311,16 @@ export default function BillsPage() {
                     <Button variant="ghost" size="sm" onClick={() => handleOpenModal(bill)}>
                         Edit
                     </Button>
+                    {isFromRecurringSource(bill) && (
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-orange-600 hover:text-orange-700 hover:bg-orange-50"
+                            onClick={() => handleStopRecurring(bill)}
+                        >
+                            Stop Recurring
+                        </Button>
+                    )}
                     <Button
                         variant="ghost"
                         size="sm"
@@ -408,11 +461,10 @@ export default function BillsPage() {
             >
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <Input
-                        label="Description"
+                        label="Description (optional)"
                         value={formData.description}
                         onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                         placeholder="e.g., Electric bill, Phone bill"
-                        required
                     />
 
                     <div className="grid grid-cols-2 gap-4">

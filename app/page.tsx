@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
 import { AppLayout } from './components/AppLayout'
 import {
   BudgetOverview,
@@ -14,10 +14,15 @@ import { useBudget } from './context/BudgetContext'
 import { filterByMonth, calculateBudgetSummary, getMonthYear } from './utils'
 
 export default function DashboardPage() {
-  const { state, isLoading } = useBudget()
+  const { state, isLoading, generateRecurringBills, payBill } = useBudget()
   const { month: currentMonth, year: currentYear } = getMonthYear()
   const [selectedMonth, setSelectedMonth] = useState(currentMonth)
   const [selectedYear, setSelectedYear] = useState(currentYear)
+
+  // Generate recurring bills when month changes
+  useEffect(() => {
+    generateRecurringBills(selectedMonth, selectedYear)
+  }, [selectedMonth, selectedYear, generateRecurringBills])
 
   const handleMonthChange = (month: number, year: number) => {
     setSelectedMonth(month)
@@ -103,6 +108,8 @@ export default function DashboardPage() {
           <UpcomingBills
             bills={monthlyBills}
             settings={state.settings}
+            accounts={state.accounts}
+            onPayBill={payBill}
           />
           <RecentTransactions
             incomes={monthlyIncomes}

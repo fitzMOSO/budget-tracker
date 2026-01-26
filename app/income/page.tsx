@@ -256,11 +256,10 @@ export default function IncomePage() {
             >
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <Input
-                        label="Description"
+                        label="Description (optional)"
                         value={formData.description}
                         onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                         placeholder="e.g., Paycheck, Business income"
-                        required
                     />
 
                     <div className="grid grid-cols-2 gap-4">

@@ -142,7 +142,7 @@ export default function ExpensesPage() {
             showSuccess('Expense updated successfully!')
         } else {
             addExpense(expenseData)
-            
+
             // Check if category is marked as a bill category - if so, also create a paid bill
             const selectedCategory = state.categories.find((c: Category) => c.id === formData.categoryId)
             if (selectedCategory?.isBill) {
@@ -358,11 +358,10 @@ export default function ExpensesPage() {
             >
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <Input
-                        label="Description"
+                        label="Description (optional)"
                         value={formData.description}
                         onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                         placeholder="e.g., Groceries, Electric bill"
-                        required
                     />
 
                     <div className="grid grid-cols-2 gap-4">

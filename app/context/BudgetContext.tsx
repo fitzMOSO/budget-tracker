@@ -71,6 +71,7 @@ type Action =
     | { type: 'DELETE_BILL'; payload: string }
     | { type: 'PAY_BILL'; payload: { id: string; paidDate: string; accountId: string } }
     | { type: 'UNPAY_BILL'; payload: string }
+    | { type: 'GENERATE_RECURRING_BILLS'; payload: { month: number; year: number } }
     // Credit Cards
     | { type: 'ADD_CREDIT_CARD'; payload: CreditCard }
     | { type: 'UPDATE_CREDIT_CARD'; payload: CreditCard }
@@ -208,13 +209,46 @@ function reducer(state: AppState, action: Action): AppState {
         case 'ADD_BILL':
             return { ...state, bills: [...state.bills, action.payload] }
 
-        case 'UPDATE_BILL':
+        case 'UPDATE_BILL': {
+            const updatedBill = action.payload
+            const existingBill = state.bills.find((b) => b.id === updatedBill.id)
+
+            // If recurring was turned OFF, only delete FUTURE generated bills (keep current and past)
+            if (existingBill?.isRecurring && !updatedBill.isRecurring) {
+                const today = new Date()
+                const currentMonth = today.getMonth()
+                const currentYear = today.getFullYear()
+
+                return {
+                    ...state,
+                    bills: state.bills
+                        .filter((b) => {
+                            // Keep bills that are NOT generated from this source
+                            if (b.recurringSourceId !== updatedBill.id) return true
+
+                            // For generated bills, keep if they're in current month or earlier
+                            const billDate = new Date(b.dueDate)
+                            const billMonth = billDate.getMonth()
+                            const billYear = billDate.getFullYear()
+
+                            // Keep if bill is in past or current month
+                            if (billYear < currentYear) return true
+                            if (billYear === currentYear && billMonth <= currentMonth) return true
+
+                            // Delete future bills
+                            return false
+                        })
+                        .map((b) => (b.id === updatedBill.id ? updatedBill : b)), // Update the source bill
+                }
+            }
+
             return {
                 ...state,
                 bills: state.bills.map((b) =>
-                    b.id === action.payload.id ? action.payload : b
+                    b.id === updatedBill.id ? updatedBill : b
                 ),
             }
+        }
 
         case 'DELETE_BILL':
             return {
@@ -241,6 +275,104 @@ function reducer(state: AppState, action: Action): AppState {
                         : b
                 ),
             }
+
+        case 'GENERATE_RECURRING_BILLS': {
+            const { month, year } = action.payload
+            // Only use ORIGINAL recurring bills as sources (not generated copies)
+            const recurringBills = state.bills.filter((b) => b.isRecurring && !b.recurringSourceId)
+            const newBills: Bill[] = []
+
+            // Get current date for rolling window calculation
+            const today = new Date()
+            const currentMonth = today.getMonth() + 1
+            const currentYear = today.getFullYear()
+
+            // Calculate max allowed month (current month + 1 = next month only)
+            let maxMonth = currentMonth + 1
+            let maxYear = currentYear
+            if (maxMonth > 12) {
+                maxMonth = 1
+                maxYear = currentYear + 1
+            }
+
+            // Generate bills for requested month AND next month (rolling window)
+            const monthsToGenerate = [
+                { month, year },
+                { month: month === 12 ? 1 : month + 1, year: month === 12 ? year + 1 : year }
+            ]
+
+            for (const bill of recurringBills) {
+                // Parse the original bill's due date to get the day
+                const originalDate = new Date(bill.dueDate)
+                const originalMonth = originalDate.getMonth() + 1
+                const originalYear = originalDate.getFullYear()
+                const dayOfMonth = originalDate.getDate()
+
+                for (const target of monthsToGenerate) {
+                    // Only generate bills for months AFTER the original bill date (forward only)
+                    if (target.year < originalYear || (target.year === originalYear && target.month <= originalMonth)) {
+                        continue
+                    }
+
+                    // Only generate up to next month from TODAY (rolling window)
+                    // This prevents generating bills far into the future
+                    if (target.year > maxYear || (target.year === maxYear && target.month > maxMonth)) {
+                        continue
+                    }
+
+                    // Create the target date for the requested month
+                    // Handle months with fewer days (e.g., Feb 28/29)
+                    const lastDayOfTargetMonth = new Date(target.year, target.month, 0).getDate()
+                    const targetDay = Math.min(dayOfMonth, lastDayOfTargetMonth)
+                    const targetDate = new Date(target.year, target.month - 1, targetDay)
+                    const targetDateISO = targetDate.toISOString().split('T')[0]
+
+                    // Check if a bill for this recurring source already exists in this month
+                    const existingBill = state.bills.find((b) => {
+                        const billDate = new Date(b.dueDate)
+                        return (
+                            b.recurringSourceId === bill.id &&
+                            billDate.getMonth() === target.month - 1 &&
+                            billDate.getFullYear() === target.year
+                        )
+                    })
+
+                    // Also check newBills to avoid duplicates within same dispatch
+                    const alreadyInNewBills = newBills.some((b) => {
+                        const billDate = new Date(b.dueDate)
+                        return (
+                            b.recurringSourceId === bill.id &&
+                            billDate.getMonth() === target.month - 1 &&
+                            billDate.getFullYear() === target.year
+                        )
+                    })
+
+                    // Only create a new bill if one doesn't already exist for this month
+                    if (!existingBill && !alreadyInNewBills) {
+                        newBills.push({
+                            id: uuidv4(),
+                            description: bill.description,
+                            amount: bill.amount,
+                            dueDate: targetDateISO,
+                            isPaid: false,
+                            isRecurring: false, // Generated bills are NOT recurring sources
+                            recurringSourceId: bill.id,
+                            categoryId: bill.categoryId,
+                            notes: bill.notes,
+                        })
+                    }
+                }
+            }
+
+            if (newBills.length === 0) {
+                return state
+            }
+
+            return {
+                ...state,
+                bills: [...state.bills, ...newBills],
+            }
+        }
 
         // Credit Cards
         case 'ADD_CREDIT_CARD':
@@ -411,6 +543,7 @@ type BudgetContextType = {
     deleteBill: (id: string) => void
     payBill: (id: string, paidDate: string, accountId: string) => void
     unpayBill: (id: string) => void
+    generateRecurringBills: (month: number, year: number) => void
     // Credit Cards
     addCreditCard: (card: Omit<CreditCard, 'id'>) => void
     updateCreditCard: (card: CreditCard) => void
@@ -576,6 +709,10 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         dispatch({ type: 'UNPAY_BILL', payload: id })
     }, [])
 
+    const generateRecurringBills = useCallback((month: number, year: number) => {
+        dispatch({ type: 'GENERATE_RECURRING_BILLS', payload: { month, year } })
+    }, [])
+
     // Credit Card functions
     const addCreditCard = useCallback((card: Omit<CreditCard, 'id'>) => {
         dispatch({ type: 'ADD_CREDIT_CARD', payload: { ...card, id: uuidv4() } })
@@ -670,6 +807,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         deleteBill,
         payBill,
         unpayBill,
+        generateRecurringBills,
         addCreditCard,
         updateCreditCard,
         deleteCreditCard,

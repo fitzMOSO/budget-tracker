@@ -5,11 +5,22 @@ import Swal from 'sweetalert2'
 // Base toast configuration
 const Toast = Swal.mixin({
     toast: true,
-    position: 'top-end',
+    position: 'bottom-end',
     showConfirmButton: false,
     timer: 3000,
     timerProgressBar: true,
+    showClass: {
+        popup: 'swal2-show'
+    },
+    hideClass: {
+        popup: 'swal2-hide'
+    },
+    customClass: {
+        popup: 'pointer-events-none',
+        container: 'pointer-events-none'
+    },
     didOpen: (toast) => {
+        toast.style.pointerEvents = 'auto'
         toast.onmouseenter = Swal.stopTimer
         toast.onmouseleave = Swal.resumeTimer
     }
