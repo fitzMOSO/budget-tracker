@@ -188,10 +188,11 @@ export function QuickActions() {
             <div className="relative">
                 <button
                     onClick={() => setIsMenuOpen(!isMenuOpen)}
-                    className="flex items-center gap-1.5 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+                    aria-label="Quick Add"
+                    title="Quick Add"
+                    className="w-12 h-12 flex items-center justify-center bg-blue-600 text-white rounded-full shadow-lg hover:bg-blue-700 transition-colors"
                 >
-                    <Plus className="w-4 h-4" />
-                    <span className="hidden sm:inline">Quick Add</span>
+                    <Plus className="w-5 h-5" />
                 </button>
 
                 {/* Dropdown Menu */}
@@ -201,27 +202,33 @@ export function QuickActions() {
                             className="fixed inset-0 z-40"
                             onClick={() => setIsMenuOpen(false)}
                         />
-                        <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
+                        <div className="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-lg border border-gray-200 py-2 z-50">
                             <button
                                 onClick={handleOpenQuickIncomeModal}
-                                className="w-full flex items-center gap-2 px-4 py-2.5 text-left hover:bg-green-50 text-gray-700 hover:text-green-700 transition-colors"
+                                className="w-full flex items-center gap-3 px-4 py-3 text-left rounded-md hover:bg-green-50 text-gray-700 hover:text-green-700 transition-colors"
                             >
-                                <TrendingUp className="w-4 h-4 text-green-600" />
+                                <span className="w-8 h-8 flex items-center justify-center rounded-full bg-green-100 text-green-700">
+                                    <TrendingUp className="w-4 h-4" />
+                                </span>
                                 <span>Add Income</span>
                             </button>
                             <button
                                 onClick={handleOpenQuickExpenseModal}
-                                className="w-full flex items-center gap-2 px-4 py-2.5 text-left hover:bg-red-50 text-gray-700 hover:text-red-700 transition-colors"
+                                className="w-full flex items-center gap-3 px-4 py-3 text-left rounded-md hover:bg-red-50 text-gray-700 hover:text-red-700 transition-colors"
                             >
-                                <TrendingDown className="w-4 h-4 text-red-600" />
+                                <span className="w-8 h-8 flex items-center justify-center rounded-full bg-red-100 text-red-700">
+                                    <TrendingDown className="w-4 h-4" />
+                                </span>
                                 <span>Add Expense</span>
                             </button>
-                            <hr className="my-1" />
+                            <div className="my-1" />
                             <button
                                 onClick={handleOpenTransferModal}
-                                className="w-full flex items-center gap-2 px-4 py-2.5 text-left hover:bg-blue-50 text-gray-700 hover:text-blue-700 transition-colors"
+                                className="w-full flex items-center gap-3 px-4 py-3 text-left rounded-md hover:bg-blue-50 text-gray-700 hover:text-blue-700 transition-colors"
                             >
-                                <ArrowLeftRight className="w-4 h-4 text-blue-600" />
+                                <span className="w-8 h-8 flex items-center justify-center rounded-full bg-blue-100 text-blue-700">
+                                    <ArrowLeftRight className="w-4 h-4" />
+                                </span>
                                 <span>Transfer Funds</span>
                             </button>
                         </div>

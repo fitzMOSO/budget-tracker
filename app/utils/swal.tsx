@@ -1,4 +1,4 @@
-'use client'
+"use client"
 
 import Swal from 'sweetalert2'
 import React from 'react'
@@ -117,7 +117,7 @@ export const showAccountSelect = async (
         html: `
             <div class="mt-2 text-sm text-gray-700">Select an account to continue</div>
             <div class="mt-4">
-                <select id="swal-account-select" class="border border-gray-200 rounded-lg p-3 w-full h-12 appearance-none bg-white focus:outline-none focus:ring-2 focus:ring-blue-200">${optionsHtml}</select>
+                <select id="swal-account-select" class="border border-gray-200 rounded-lg p-3 w-full h-12 bg-white focus:outline-none focus:ring-2 focus:ring-blue-200">${optionsHtml}</select>
             </div>
         `,
         showCancelButton: true,
@@ -151,7 +151,7 @@ export const showAccountSelect = async (
 // Payment dialog with account selection
 export const showPaymentDialog = async (
     title: string,
-    accounts: { id: string; name: string }[],
+    accounts: { id: string; name: string; balance?: number }[],
     amount: number,
     currencySymbol: string = '₱'
 ): Promise<{ accountId: string } | null> => {
@@ -199,11 +199,14 @@ export const showPaymentDialog = async (
                         <select
                             value={selected}
                             onChange={(e) => { setSelected(e.target.value); setError(null) }}
-                            className="w-full border border-gray-200 rounded-lg p-3 h-12 appearance-none bg-white focus:outline-none focus:ring-2 focus:ring-blue-200"
+                            className="w-full border border-gray-200 rounded-lg p-3 h-12 bg-white focus:outline-none focus:ring-2 focus:ring-blue-200"
                         >
-                            {accounts.map(a => (
-                                <option key={a.id} value={a.id}>{a.name}</option>
-                            ))}
+                            {accounts.map(a => {
+                                    const label = a.balance != null
+                                        ? `${a.name} (${currencySymbol}${a.balance.toLocaleString('en-US', { minimumFractionDigits: 2 })})`
+                                        : a.name
+                                    return <option key={a.id} value={a.id}>{label}</option>
+                                })}
                         </select>
                         {error && <p className="text-sm text-red-600 mt-2">{error}</p>}
                     </div>

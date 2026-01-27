@@ -24,9 +24,9 @@ export function UpcomingBills({ bills, settings, accounts = [], onPayBill }: Upc
 
         const result = await showPaymentDialog(
             `Pay ${bill.description}?`,
-            accounts.map(acc => ({ id: acc.id, name: acc.name })),
+            accounts.map(acc => ({ id: acc.id, name: acc.name, balance: acc.balance })),
             bill.amount,
-            settings.currency
+            settings.currencySymbol
         )
 
         if (result) {
