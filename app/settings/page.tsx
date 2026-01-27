@@ -445,11 +445,21 @@ export default function SettingsPage() {
                             <p className="text-sm text-blue-700 mb-2">
                                 After installing the app, long-press the app icon to see quick actions:
                             </p>
-                            <ul className="text-sm text-blue-700 list-disc list-inside space-y-1">
+                            <ul className="text-sm text-blue-700 list-disc list-inside space-y-1 mb-3">
                                 <li><strong>Add Expense</strong> - Quickly add a new expense</li>
                                 <li><strong>Add Income</strong> - Quickly add a new income</li>
+                                <li><strong>Transfer Funds</strong> - Transfer between accounts</li>
                                 <li><strong>View Bills</strong> - Jump to your bills page</li>
                             </ul>
+
+                            <p className="text-xs text-blue-700 font-medium mb-2">📲 Samsung One UI Instructions:</p>
+                            <ol className="text-xs text-blue-700 list-decimal list-inside space-y-1">
+                                <li>Long-press an empty area on your home screen</li>
+                                <li>Tap <strong>"Widgets"</strong></li>
+                                <li>Scroll down and find <strong>"Budget Tracker"</strong></li>
+                                <li>Long-press the widget/app and select <strong>"Add to Home Screen"</strong></li>
+                                <li>Or, long-press the app icon to see all available shortcuts</li>
+                            </ol>
                         </div>
                     </CardContent>
                 </Card>

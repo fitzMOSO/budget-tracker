@@ -4,6 +4,7 @@ import "./globals.css"
 import { BudgetProvider } from "./context/BudgetContext"
 import { ServiceWorkerRegistration } from "./components/ServiceWorkerRegistration"
 import { InstallPrompt } from "./components/InstallPrompt"
+import { WidgetHelper } from "./components/WidgetHelper"
 
 const inter = Inter({
   variable: "--font-inter",
@@ -62,6 +63,7 @@ export default function RootLayout({
         <BudgetProvider>{children}</BudgetProvider>
         <ServiceWorkerRegistration />
         <InstallPrompt />
+        <WidgetHelper />
       </body>
     </html>
   )
