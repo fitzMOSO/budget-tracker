@@ -28,6 +28,7 @@ export function QuickActions() {
         description: '',
         amount: '',
         accountId: '',
+        categoryId: '',
         date: getTodayISO(),
     })
 
@@ -36,6 +37,7 @@ export function QuickActions() {
         description: '',
         amount: '',
         accountId: '',
+        categoryId: '',
         expenseType: 'essential' as 'essential' | 'non-essential' | 'savings',
         date: getTodayISO(),
     })
@@ -86,10 +88,12 @@ export function QuickActions() {
     // Quick Income functions
     const handleOpenQuickIncomeModal = () => {
         const defaultAccount = state.accounts.find(a => a.isDefault)?.id || state.accounts[0]?.id || ''
+        const defaultCategory = state.categories.find(c => c.type === 'income')?.id || ''
         setQuickIncomeData({
             description: '',
             amount: '',
             accountId: defaultAccount,
+            categoryId: defaultCategory,
             date: getTodayISO(),
         })
         setIsQuickIncomeModalOpen(true)
@@ -98,7 +102,7 @@ export function QuickActions() {
 
     const handleCloseQuickIncomeModal = () => {
         setIsQuickIncomeModalOpen(false)
-        setQuickIncomeData({ description: '', amount: '', accountId: '', date: getTodayISO() })
+        setQuickIncomeData({ description: '', amount: '', accountId: '', categoryId: '', date: getTodayISO() })
     }
 
     const handleQuickIncomeSubmit = (e: React.FormEvent) => {
@@ -110,9 +114,8 @@ export function QuickActions() {
             return
         }
 
-        const defaultCategory = state.categories.find(c => c.type === 'income')
-        if (!defaultCategory) {
-            showError('No income category found. Please add an income category first.')
+        if (!quickIncomeData.categoryId) {
+            showError('Please select a category')
             return
         }
 
@@ -120,7 +123,7 @@ export function QuickActions() {
             description: quickIncomeData.description,
             amount: amount,
             date: quickIncomeData.date,
-            categoryId: defaultCategory.id,
+            categoryId: quickIncomeData.categoryId,
             accountId: quickIncomeData.accountId,
         })
         showSuccess('Income added successfully!')
@@ -130,10 +133,12 @@ export function QuickActions() {
     // Quick Expense functions
     const handleOpenQuickExpenseModal = () => {
         const defaultAccount = state.accounts.find(a => a.isDefault)?.id || state.accounts[0]?.id || ''
+        const defaultCategory = state.categories.find(c => c.type === 'expense')?.id || ''
         setQuickExpenseData({
             description: '',
             amount: '',
             accountId: defaultAccount,
+            categoryId: defaultCategory,
             expenseType: 'essential',
             date: getTodayISO(),
         })
@@ -143,7 +148,7 @@ export function QuickActions() {
 
     const handleCloseQuickExpenseModal = () => {
         setIsQuickExpenseModalOpen(false)
-        setQuickExpenseData({ description: '', amount: '', accountId: '', expenseType: 'essential', date: getTodayISO() })
+        setQuickExpenseData({ description: '', amount: '', accountId: '', categoryId: '', expenseType: 'essential', date: getTodayISO() })
     }
 
     const handleQuickExpenseSubmit = (e: React.FormEvent) => {
@@ -155,9 +160,8 @@ export function QuickActions() {
             return
         }
 
-        const defaultCategory = state.categories.find(c => c.type === 'expense')
-        if (!defaultCategory) {
-            showError('No expense category found. Please add an expense category first.')
+        if (!quickExpenseData.categoryId) {
+            showError('Please select a category')
             return
         }
 
@@ -165,7 +169,7 @@ export function QuickActions() {
             description: quickExpenseData.description,
             amount: amount,
             date: quickExpenseData.date,
-            categoryId: defaultCategory.id,
+            categoryId: quickExpenseData.categoryId,
             accountId: quickExpenseData.accountId,
             expenseType: quickExpenseData.expenseType,
         })
@@ -311,6 +315,19 @@ export function QuickActions() {
                     />
 
                     <Select
+                        label="Category"
+                        value={quickIncomeData.categoryId}
+                        onChange={(e) => setQuickIncomeData({ ...quickIncomeData, categoryId: e.target.value })}
+                        options={state.categories
+                            .filter((c) => c.type === 'income')
+                            .map((c) => ({
+                                value: c.id,
+                                label: c.name,
+                            }))}
+                        required
+                    />
+
+                    <Select
                         label="Deposit to Account"
                         value={quickIncomeData.accountId}
                         onChange={(e) => setQuickIncomeData({ ...quickIncomeData, accountId: e.target.value })}
@@ -363,6 +380,19 @@ export function QuickActions() {
                         value={quickExpenseData.amount}
                         onChange={(e) => setQuickExpenseData({ ...quickExpenseData, amount: e.target.value })}
                         placeholder="0.00"
+                        required
+                    />
+
+                    <Select
+                        label="Category"
+                        value={quickExpenseData.categoryId}
+                        onChange={(e) => setQuickExpenseData({ ...quickExpenseData, categoryId: e.target.value })}
+                        options={state.categories
+                            .filter((c) => c.type === 'expense')
+                            .map((c) => ({
+                                value: c.id,
+                                label: c.name,
+                            }))}
                         required
                     />
 
