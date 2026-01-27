@@ -1,6 +1,12 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Export static site for Capacitor by enabling `output: 'export'`.
+  output: 'export',
+  // Disable Next.js Image Optimization for static export builds
+  images: {
+    unoptimized: true,
+  },
   // PWA configuration
   async headers() {
     return [

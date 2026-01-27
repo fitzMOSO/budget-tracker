@@ -17,6 +17,22 @@
 /.next/
 /out/
 
+# Capacitor / native projects
+android/
+ios/
+
+# Capacitor generated files
+capacitor.config.json
+capacitor.config.ts
+
+# Editor/IDE
+.vscode/
+
+# OS files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
 # production
 /build
 

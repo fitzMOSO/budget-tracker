@@ -1,0 +1,8 @@
+[build]
+  command = "npm ci && npm run build:web"
+  publish = "out"
+  functions = "netlify/functions"
+
+[context.production.environment]
+# Example env keys you may want to set in Netlify UI instead of committing
+# NEXT_PUBLIC_API_BASE_URL = "https://api.example.com"

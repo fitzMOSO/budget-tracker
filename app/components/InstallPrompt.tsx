@@ -12,6 +12,7 @@ export function InstallPrompt() {
     const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null)
     const [isInstalled, setIsInstalled] = useState(false)
     const [showInstructions, setShowInstructions] = useState(false)
+    const [platformInstructions, setPlatformInstructions] = useState<'android' | 'ios' | null>(null)
 
     useEffect(() => {
         if (typeof window === 'undefined') return
@@ -61,6 +62,40 @@ export function InstallPrompt() {
         setShowInstructions((s) => !s)
     }
 
+    const handlePlatformClick = async (platform: 'android' | 'ios') => {
+        // Try to use the deferred prompt if available (works on supported Android browsers)
+        if (deferredPrompt) {
+            try {
+                await deferredPrompt.prompt()
+                const { outcome } = await deferredPrompt.userChoice
+                if (outcome === 'accepted') setIsInstalled(true)
+            } catch (err) {
+                console.error('Install prompt failed:', err)
+            } finally {
+                setDeferredPrompt(null)
+            }
+            return
+        }
+
+        // If a store URL is configured via env, open it
+        const envKey = platform === 'android' ? process.env.NEXT_PUBLIC_ANDROID_URL : process.env.NEXT_PUBLIC_IOS_URL
+        if (envKey) {
+            try {
+                window.open(envKey, '_blank')
+                // After opening the store, show instructions so user can confirm installation
+                setPlatformInstructions(platform)
+                setShowInstructions(true)
+                return
+            } catch (e) {
+                console.error('Failed opening store URL', e)
+            }
+        }
+
+        // Fallback: show platform-specific manual instructions
+        setPlatformInstructions(platform)
+        setShowInstructions(true)
+    }
+
     if (isInstalled) return null
 
     return (
@@ -76,7 +111,23 @@ export function InstallPrompt() {
                 </button>
 
                 <button
-                    onClick={() => setShowInstructions((s) => !s)}
+                    onClick={() => handlePlatformClick('android')}
+                    className="px-3 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition text-sm"
+                    title="Install on Android"
+                >
+                    🤖 Android
+                </button>
+
+                <button
+                    onClick={() => handlePlatformClick('ios')}
+                    className="px-3 py-2 bg-black text-white rounded-md hover:opacity-90 transition text-sm"
+                    title="Install on iOS"
+                >
+                     iOS
+                </button>
+
+                <button
+                    onClick={() => { setShowInstructions((s) => !s); setPlatformInstructions(null) }}
                     className="px-2 py-1 text-xs text-gray-700 hover:underline"
                 >
                     {showInstructions ? 'Hide' : 'How'}
@@ -86,12 +137,59 @@ export function InstallPrompt() {
             {showInstructions && (
                 <div className="mt-2 max-w-xs bg-white border border-gray-200 shadow-sm rounded-md p-3 text-sm text-gray-800">
                     <p className="font-medium mb-2">Manual install</p>
-                    <ol className="list-decimal list-inside space-y-1">
-                        <li>Open your browser menu (⋮ or ⋯)</li>
-                        <li>Choose "Install app" or "Add to Home screen"</li>
-                        <li>Follow the browser prompts to add the app</li>
-                    </ol>
-                    <p className="mt-2 text-xs text-gray-500">If you recently uninstalled the app, the browser may block the native prompt—use the manual steps above.</p>
+                    {platformInstructions === 'android' && (
+                        <>
+                            <ol className="list-decimal list-inside space-y-1">
+                                <li>Open Chrome menu (⋮)</li>
+                                <li>Choose "Install app" or "Add to Home screen"</li>
+                                <li>Confirm and add to your home screen</li>
+                            </ol>
+                        </>
+                    )}
+
+                    {platformInstructions === 'ios' && (
+                        <>
+                            <ol className="list-decimal list-inside space-y-1">
+                                <li>Open Safari's share menu (the square + arrow)</li>
+                                <li>Tap "Add to Home Screen"</li>
+                                <li>Confirm to add the icon to your home screen</li>
+                            </ol>
+                        </>
+                    )}
+
+                    {!platformInstructions && (
+                        <>
+                            <ol className="list-decimal list-inside space-y-1">
+                                <li>Open your browser menu (⋮ or ⋯)</li>
+                                <li>Choose "Install app" or "Add to Home screen"</li>
+                                <li>Follow the browser prompts to add the app</li>
+                            </ol>
+                            <p className="mt-2 text-xs text-gray-500">If you recently uninstalled the app, the browser may block the native prompt—use the manual steps above.</p>
+                        </>
+                    )}
+
+                    <div className="mt-3 flex gap-2">
+                        <button
+                            onClick={() => {
+                                setIsInstalled(true)
+                                setShowInstructions(false)
+                                setPlatformInstructions(null)
+                            }}
+                            className="px-3 py-1 bg-blue-600 text-white rounded-md text-sm"
+                        >
+                            I've installed
+                        </button>
+
+                        <button
+                            onClick={() => {
+                                setShowInstructions(false)
+                                setPlatformInstructions(null)
+                            }}
+                            className="px-3 py-1 bg-gray-200 text-gray-800 rounded-md text-sm"
+                        >
+                            Close
+                        </button>
+                    </div>
                 </div>
             )}
         </div>
