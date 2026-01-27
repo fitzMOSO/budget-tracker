@@ -3,6 +3,7 @@
 import React from 'react'
 import { Card, CardHeader, CardTitle, CardContent, Badge, Button } from '../ui'
 import { formatCurrency, formatDate, isOverdue } from '../../utils'
+import { showPaymentDialog, showSuccess } from '../../utils/swal'
 import type { Bill, AppSettings, Account } from '../../types'
 
 interface UpcomingBillsProps {
@@ -17,6 +18,23 @@ export function UpcomingBills({ bills, settings, accounts = [], onPayBill }: Upc
         .filter((b) => !b.isPaid)
         .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
         .slice(0, 5)
+
+    const handlePayBill = async (bill: Bill) => {
+        if (!onPayBill || accounts.length === 0) return
+
+        const result = await showPaymentDialog(
+            `Pay ${bill.description}?`,
+            accounts.map(acc => ({ id: acc.id, name: acc.name })),
+            bill.amount,
+            settings.currency
+        )
+
+        if (result) {
+            const today = new Date().toISOString().split('T')[0]
+            onPayBill(bill.id, today, result.accountId)
+            showSuccess(`${bill.description} has been paid!`)
+        }
+    }
 
     return (
         <Card className="h-full">
@@ -56,10 +74,7 @@ export function UpcomingBills({ bills, settings, accounts = [], onPayBill }: Upc
                                             <Button
                                                 size="sm"
                                                 variant="primary"
-                                                onClick={() => {
-                                                    const today = new Date().toISOString().split('T')[0]
-                                                    onPayBill(bill.id, today, accounts[0].id)
-                                                }}
+                                                onClick={() => handlePayBill(bill)}
                                                 className="text-xs px-2 py-1"
                                             >
                                                 Pay

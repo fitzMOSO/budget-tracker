@@ -36,6 +36,7 @@ export function QuickActions() {
         description: '',
         amount: '',
         accountId: '',
+        expenseType: 'essential' as 'essential' | 'non-essential' | 'savings',
         date: getTodayISO(),
     })
 
@@ -133,6 +134,7 @@ export function QuickActions() {
             description: '',
             amount: '',
             accountId: defaultAccount,
+            expenseType: 'essential',
             date: getTodayISO(),
         })
         setIsQuickExpenseModalOpen(true)
@@ -141,7 +143,7 @@ export function QuickActions() {
 
     const handleCloseQuickExpenseModal = () => {
         setIsQuickExpenseModalOpen(false)
-        setQuickExpenseData({ description: '', amount: '', accountId: '', date: getTodayISO() })
+        setQuickExpenseData({ description: '', amount: '', accountId: '', expenseType: 'essential', date: getTodayISO() })
     }
 
     const handleQuickExpenseSubmit = (e: React.FormEvent) => {
@@ -165,7 +167,7 @@ export function QuickActions() {
             date: quickExpenseData.date,
             categoryId: defaultCategory.id,
             accountId: quickExpenseData.accountId,
-            expenseType: 'essential',
+            expenseType: quickExpenseData.expenseType,
         })
         showSuccess('Expense added successfully!')
         handleCloseQuickExpenseModal()
@@ -372,6 +374,18 @@ export function QuickActions() {
                             value: a.id,
                             label: `${a.name} (${formatCurrency(a.balance, state.settings)})`,
                         }))}
+                        required
+                    />
+
+                    <Select
+                        label="Expense Type"
+                        value={quickExpenseData.expenseType}
+                        onChange={(e) => setQuickExpenseData({ ...quickExpenseData, expenseType: e.target.value as 'essential' | 'non-essential' | 'savings' })}
+                        options={[
+                            { value: 'essential', label: 'Essential (50%)' },
+                            { value: 'non-essential', label: 'Non-Essential (30%)' },
+                            { value: 'savings', label: 'Savings (20%)' },
+                        ]}
                         required
                     />
 

@@ -1,13 +1,13 @@
 'use client'
 
-import React, { useState } from 'react'
-import { Settings as SettingsIcon, Save, RefreshCw, Download, FileSpreadsheet } from 'lucide-react'
+import React, { useState, useRef } from 'react'
+import { Settings as SettingsIcon, Save, RefreshCw, Download, Upload, FileSpreadsheet } from 'lucide-react'
 import { AppLayout } from '../components/AppLayout'
 import { Card, CardHeader, CardTitle, CardContent, Button, Input, Select } from '../components/ui'
 import { useBudget } from '../context/BudgetContext'
 import { getMonthYear } from '../utils'
 import { exportToExcel } from '../utils/excel'
-import { showSuccess, showError, showDeleteConfirm } from '../utils/swal'
+import { showSuccess, showError, showDeleteConfirm, showConfirm } from '../utils/swal'
 
 const CURRENCIES = [
     { value: 'PHP', label: 'Philippine Peso (₱)', symbol: '₱' },
@@ -23,10 +23,11 @@ const CURRENCIES = [
 ]
 
 export default function SettingsPage() {
-    const { state, updateSettings, resetData, isLoading } = useBudget()
+    const { state, updateSettings, resetData, importData, isLoading } = useBudget()
     const { month: currentMonth, year: currentYear } = getMonthYear()
     const [selectedMonth, setSelectedMonth] = useState(currentMonth)
     const [selectedYear, setSelectedYear] = useState(currentYear)
+    const fileInputRef = useRef<HTMLInputElement>(null)
 
     const [formData, setFormData] = useState({
         currency: state.settings.currency,
@@ -91,6 +92,66 @@ export default function SettingsPage() {
             showSuccess('Analytics report exported to Excel successfully!')
         } catch (error) {
             showError('Failed to export data')
+        }
+    }
+
+    // Export Backup (JSON)
+    const handleExportBackup = () => {
+        try {
+            const backupData = {
+                version: '1.0.0',
+                exportDate: new Date().toISOString(),
+                data: state,
+            }
+            const dataStr = JSON.stringify(backupData, null, 2)
+            const blob = new Blob([dataStr], { type: 'application/json' })
+            const url = URL.createObjectURL(blob)
+            const link = document.createElement('a')
+            link.href = url
+            link.download = `budget-tracker-backup-${new Date().toISOString().split('T')[0]}.json`
+            document.body.appendChild(link)
+            link.click()
+            document.body.removeChild(link)
+            URL.revokeObjectURL(url)
+            showSuccess('Backup exported successfully!')
+        } catch (error) {
+            showError('Failed to export backup')
+        }
+    }
+
+    // Import Backup (JSON)
+    const handleImportBackup = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0]
+        if (!file) return
+
+        try {
+            const text = await file.text()
+            const backupData = JSON.parse(text)
+
+            // Validate backup structure
+            if (!backupData.data || !backupData.version) {
+                showError('Invalid backup file format')
+                return
+            }
+
+            const confirmed = await showConfirm(
+                'Restore Backup?',
+                'This will replace all your current data with the backup data. This action cannot be undone.',
+                'Yes, Restore',
+                'Cancel'
+            )
+
+            if (confirmed) {
+                importData(backupData.data)
+                showSuccess('Backup restored successfully!')
+            }
+        } catch (error) {
+            showError('Failed to read backup file. Please ensure it is a valid JSON file.')
+        }
+
+        // Reset file input
+        if (fileInputRef.current) {
+            fileInputRef.current.value = ''
         }
     }
 
@@ -203,16 +264,49 @@ export default function SettingsPage() {
                         <CardTitle>Data Management</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                        <div className="flex flex-col sm:flex-row gap-4">
+                        {/* Backup & Restore */}
+                        <div>
+                            <h4 className="font-medium text-gray-800 mb-3">Backup & Restore</h4>
+                            <div className="flex flex-col sm:flex-row gap-3">
+                                <Button variant="outline" onClick={handleExportBackup}>
+                                    <Download className="w-4 h-4 mr-2" />
+                                    Export Backup
+                                </Button>
+                                <Button
+                                    variant="outline"
+                                    onClick={() => fileInputRef.current?.click()}
+                                >
+                                    <Upload className="w-4 h-4 mr-2" />
+                                    Import Backup
+                                </Button>
+                                <input
+                                    ref={fileInputRef}
+                                    type="file"
+                                    accept=".json"
+                                    onChange={handleImportBackup}
+                                    className="hidden"
+                                />
+                            </div>
+                            <p className="text-sm text-gray-500 mt-2">
+                                Export all your data (accounts, income, expenses, bills, credit cards, savings, categories, and settings) as a backup file.
+                                You can restore this backup later to recover your data.
+                            </p>
+                        </div>
+
+                        <hr className="my-4" />
+
+                        {/* Analytics Export */}
+                        <div>
+                            <h4 className="font-medium text-gray-800 mb-3">Analytics Report</h4>
                             <Button variant="outline" onClick={handleExportExcel}>
                                 <FileSpreadsheet className="w-4 h-4 mr-2" />
-                                Export Analytics Report
+                                Export to Excel
                             </Button>
+                            <p className="text-sm text-gray-500 mt-2">
+                                Export a comprehensive analytics report to Excel (.xlsx) with detailed breakdowns of income, expenses,
+                                monthly trends, account activity, budget analysis, and more.
+                            </p>
                         </div>
-                        <p className="text-sm text-gray-500">
-                            Export a comprehensive analytics report to Excel (.xlsx) with detailed breakdowns of income, expenses,
-                            monthly trends, account activity, budget analysis, and more.
-                        </p>
 
                         <hr className="my-4" />
 

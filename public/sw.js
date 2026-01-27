@@ -14,7 +14,7 @@ self.addEventListener('install', (event) => {
             return cache.addAll(STATIC_ASSETS)
         })
     )
-    self.skipWaiting()
+    // Don't skip waiting automatically - let the app control this
 })
 
 // Activate event - clean up old caches
@@ -29,6 +29,13 @@ self.addEventListener('activate', (event) => {
         })
     )
     self.clients.claim()
+})
+
+// Handle skip waiting message from the app
+self.addEventListener('message', (event) => {
+    if (event.data && event.data.type === 'SKIP_WAITING') {
+        self.skipWaiting()
+    }
 })
 
 // Fetch event - network first, fallback to cache

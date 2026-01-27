@@ -187,19 +187,70 @@ function reducer(state: AppState, action: Action): AppState {
             return { ...state, incomes: [...state.incomes, income] }
         }
 
-        case 'UPDATE_INCOME':
+        case 'UPDATE_INCOME': {
+            const updatedIncome = action.payload
+            const oldIncome = state.incomes.find((i) => i.id === updatedIncome.id)
+
+            if (!oldIncome) {
+                return {
+                    ...state,
+                    incomes: state.incomes.map((i) =>
+                        i.id === updatedIncome.id ? updatedIncome : i
+                    ),
+                }
+            }
+
+            // Calculate account balance adjustments
+            let updatedAccounts = [...state.accounts]
+
+            // If old income had an account, deduct the old amount
+            if (oldIncome.accountId) {
+                updatedAccounts = updatedAccounts.map((a) =>
+                    a.id === oldIncome.accountId
+                        ? { ...a, balance: a.balance - oldIncome.amount }
+                        : a
+                )
+            }
+
+            // If new income has an account, add the new amount
+            if (updatedIncome.accountId) {
+                updatedAccounts = updatedAccounts.map((a) =>
+                    a.id === updatedIncome.accountId
+                        ? { ...a, balance: a.balance + updatedIncome.amount }
+                        : a
+                )
+            }
+
             return {
                 ...state,
                 incomes: state.incomes.map((i) =>
-                    i.id === action.payload.id ? action.payload : i
+                    i.id === updatedIncome.id ? updatedIncome : i
                 ),
+                accounts: updatedAccounts,
+            }
+        }
+
+        case 'DELETE_INCOME': {
+            const incomeToDelete = state.incomes.find((i) => i.id === action.payload)
+
+            // If income had an account, deduct the amount back
+            if (incomeToDelete?.accountId) {
+                return {
+                    ...state,
+                    incomes: state.incomes.filter((i) => i.id !== action.payload),
+                    accounts: state.accounts.map((a) =>
+                        a.id === incomeToDelete.accountId
+                            ? { ...a, balance: a.balance - incomeToDelete.amount }
+                            : a
+                    ),
+                }
             }
 
-        case 'DELETE_INCOME':
             return {
                 ...state,
                 incomes: state.incomes.filter((i) => i.id !== action.payload),
             }
+        }
 
         // Expenses
         case 'ADD_EXPENSE': {
@@ -219,19 +270,70 @@ function reducer(state: AppState, action: Action): AppState {
             return { ...state, expenses: [...state.expenses, expense] }
         }
 
-        case 'UPDATE_EXPENSE':
+        case 'UPDATE_EXPENSE': {
+            const updatedExpense = action.payload
+            const oldExpense = state.expenses.find((e) => e.id === updatedExpense.id)
+
+            if (!oldExpense) {
+                return {
+                    ...state,
+                    expenses: state.expenses.map((e) =>
+                        e.id === updatedExpense.id ? updatedExpense : e
+                    ),
+                }
+            }
+
+            // Calculate account balance adjustments
+            let updatedAccounts = [...state.accounts]
+
+            // If old expense had an account, refund the old amount
+            if (oldExpense.accountId) {
+                updatedAccounts = updatedAccounts.map((a) =>
+                    a.id === oldExpense.accountId
+                        ? { ...a, balance: a.balance + oldExpense.amount }
+                        : a
+                )
+            }
+
+            // If new expense has an account, deduct the new amount
+            if (updatedExpense.accountId) {
+                updatedAccounts = updatedAccounts.map((a) =>
+                    a.id === updatedExpense.accountId
+                        ? { ...a, balance: a.balance - updatedExpense.amount }
+                        : a
+                )
+            }
+
             return {
                 ...state,
                 expenses: state.expenses.map((e) =>
-                    e.id === action.payload.id ? action.payload : e
+                    e.id === updatedExpense.id ? updatedExpense : e
                 ),
+                accounts: updatedAccounts,
+            }
+        }
+
+        case 'DELETE_EXPENSE': {
+            const expenseToDelete = state.expenses.find((e) => e.id === action.payload)
+
+            // If expense had an account, refund the amount
+            if (expenseToDelete?.accountId) {
+                return {
+                    ...state,
+                    expenses: state.expenses.filter((e) => e.id !== action.payload),
+                    accounts: state.accounts.map((a) =>
+                        a.id === expenseToDelete.accountId
+                            ? { ...a, balance: a.balance + expenseToDelete.amount }
+                            : a
+                    ),
+                }
             }
 
-        case 'DELETE_EXPENSE':
             return {
                 ...state,
                 expenses: state.expenses.filter((e) => e.id !== action.payload),
             }
+        }
 
         // Bills
         case 'ADD_BILL':
@@ -278,13 +380,28 @@ function reducer(state: AppState, action: Action): AppState {
             }
         }
 
-        case 'DELETE_BILL':
+        case 'DELETE_BILL': {
+            const billToDelete = state.bills.find((b) => b.id === action.payload)
+            const refundAccountId = billToDelete?.isPaid ? billToDelete.paidFromAccountId : undefined
+
             return {
                 ...state,
                 bills: state.bills.filter((b) => b.id !== action.payload),
+                // Refund bill amount if it was paid
+                accounts: refundAccountId && billToDelete
+                    ? state.accounts.map((acc) =>
+                        acc.id === refundAccountId
+                            ? { ...acc, balance: acc.balance + billToDelete.amount }
+                            : acc
+                    )
+                    : state.accounts,
             }
+        }
 
-        case 'PAY_BILL':
+        case 'PAY_BILL': {
+            const billToPay = state.bills.find((b) => b.id === action.payload.id)
+            const payAccountId = action.payload.accountId
+
             return {
                 ...state,
                 bills: state.bills.map((b) =>
@@ -292,9 +409,21 @@ function reducer(state: AppState, action: Action): AppState {
                         ? { ...b, isPaid: true, paidDate: action.payload.paidDate, paidFromAccountId: action.payload.accountId }
                         : b
                 ),
+                // Deduct bill amount from the paying account
+                accounts: payAccountId && billToPay
+                    ? state.accounts.map((acc) =>
+                        acc.id === payAccountId
+                            ? { ...acc, balance: acc.balance - billToPay.amount }
+                            : acc
+                    )
+                    : state.accounts,
             }
+        }
 
-        case 'UNPAY_BILL':
+        case 'UNPAY_BILL': {
+            const billToUnpay = state.bills.find((b) => b.id === action.payload)
+            const refundAccountId = billToUnpay?.paidFromAccountId
+
             return {
                 ...state,
                 bills: state.bills.map((b) =>
@@ -302,7 +431,16 @@ function reducer(state: AppState, action: Action): AppState {
                         ? { ...b, isPaid: false, paidDate: undefined, paidFromAccountId: undefined }
                         : b
                 ),
+                // Refund bill amount back to the account it was paid from
+                accounts: refundAccountId && billToUnpay
+                    ? state.accounts.map((acc) =>
+                        acc.id === refundAccountId
+                            ? { ...acc, balance: acc.balance + billToUnpay.amount }
+                            : acc
+                    )
+                    : state.accounts,
             }
+        }
 
         case 'GENERATE_RECURRING_BILLS': {
             const { month, year } = action.payload
@@ -490,22 +628,76 @@ function reducer(state: AppState, action: Action): AppState {
             }
 
         // Savings Contributions
-        case 'ADD_SAVINGS_CONTRIBUTION':
-            return { ...state, savingsContributions: [...state.savingsContributions, action.payload] }
+        case 'ADD_SAVINGS_CONTRIBUTION': {
+            const contribution = action.payload
+            const fromAccountId = contribution.fromAccountId
 
-        case 'UPDATE_SAVINGS_CONTRIBUTION':
+            return {
+                ...state,
+                savingsContributions: [...state.savingsContributions, contribution],
+                // Deduct contribution amount from the source account
+                accounts: fromAccountId
+                    ? state.accounts.map((acc) =>
+                        acc.id === fromAccountId
+                            ? { ...acc, balance: acc.balance - contribution.amount }
+                            : acc
+                    )
+                    : state.accounts,
+            }
+        }
+
+        case 'UPDATE_SAVINGS_CONTRIBUTION': {
+            const updatedContribution = action.payload
+            const oldContribution = state.savingsContributions.find((c) => c.id === updatedContribution.id)
+            const oldAccountId = oldContribution?.fromAccountId
+            const newAccountId = updatedContribution.fromAccountId
+
+            let updatedAccounts = state.accounts
+
+            // Refund the old account if it had one
+            if (oldAccountId && oldContribution) {
+                updatedAccounts = updatedAccounts.map((acc) =>
+                    acc.id === oldAccountId
+                        ? { ...acc, balance: acc.balance + oldContribution.amount }
+                        : acc
+                )
+            }
+
+            // Deduct from the new account if specified
+            if (newAccountId) {
+                updatedAccounts = updatedAccounts.map((acc) =>
+                    acc.id === newAccountId
+                        ? { ...acc, balance: acc.balance - updatedContribution.amount }
+                        : acc
+                )
+            }
+
             return {
                 ...state,
                 savingsContributions: state.savingsContributions.map((c) =>
-                    c.id === action.payload.id ? action.payload : c
+                    c.id === updatedContribution.id ? updatedContribution : c
                 ),
+                accounts: updatedAccounts,
             }
+        }
 
-        case 'DELETE_SAVINGS_CONTRIBUTION':
+        case 'DELETE_SAVINGS_CONTRIBUTION': {
+            const contributionToDelete = state.savingsContributions.find((c) => c.id === action.payload)
+            const refundAccountId = contributionToDelete?.fromAccountId
+
             return {
                 ...state,
                 savingsContributions: state.savingsContributions.filter((c) => c.id !== action.payload),
+                // Refund contribution amount back to the source account
+                accounts: refundAccountId && contributionToDelete
+                    ? state.accounts.map((acc) =>
+                        acc.id === refundAccountId
+                            ? { ...acc, balance: acc.balance + contributionToDelete.amount }
+                            : acc
+                    )
+                    : state.accounts,
             }
+        }
 
         // Monthly Budget
         case 'SET_MONTHLY_BUDGET':
