@@ -89,7 +89,10 @@ export default function SettingsPage() {
 
     const handleResetInstallPrompt = () => {
         localStorage.removeItem('pwa-prompt-dismissed')
-        showSuccess('Install prompt reset! Refresh the page to see it again.')
+        showSuccess('Install prompt reset! Reloading page...')
+        setTimeout(() => {
+            window.location.reload()
+        }, 1500)
     }
 
     const [formData, setFormData] = useState({

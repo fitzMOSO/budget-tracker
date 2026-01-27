@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { X, Download } from 'lucide-react'
+import Swal from 'sweetalert2'
 
 interface BeforeInstallPromptEvent extends Event {
     prompt: () => Promise<void>
@@ -11,38 +12,28 @@ interface BeforeInstallPromptEvent extends Event {
 export function InstallPrompt() {
     const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null)
     const [showPrompt, setShowPrompt] = useState(false)
-    const [isIOS, setIsIOS] = useState(false)
+    const [isIOS, setIsIOS] = useState(() => {
+        if (typeof navigator !== 'undefined') {
+            return /iPad|iPhone|iPod/.test(navigator.userAgent)
+        }
+        return false
+    })
 
     useEffect(() => {
         // Check if already installed
         const isStandalone = window.matchMedia('(display-mode: standalone)').matches
         if (isStandalone) return
 
-        // Check if iOS
-        const isIOSDevice = /iPad|iPhone|iPod/.test(navigator.userAgent)
-        setIsIOS(isIOSDevice)
-
-        // Check if prompt was dismissed recently
-        const dismissedAt = localStorage.getItem('pwa-prompt-dismissed')
-        if (dismissedAt) {
-            const daysSinceDismissed = (Date.now() - parseInt(dismissedAt)) / (1000 * 60 * 60 * 24)
-            if (daysSinceDismissed < 7) return // Don't show for 7 days after dismissal
-        }
-
         // Listen for the beforeinstallprompt event
         const handleBeforeInstallPrompt = (e: Event) => {
             e.preventDefault()
             setDeferredPrompt(e as BeforeInstallPromptEvent)
-            // Show prompt after a delay
-            setTimeout(() => setShowPrompt(true), 3000)
         }
 
         window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt)
 
-        // Show iOS instructions after delay
-        if (isIOSDevice) {
-            setTimeout(() => setShowPrompt(true), 5000)
-        }
+        // Always show prompt after delay if app is not installed
+        setTimeout(() => setShowPrompt(true), 3000)
 
         return () => {
             window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt)
@@ -50,9 +41,49 @@ export function InstallPrompt() {
     }, [])
 
     const handleInstall = async () => {
-        if (!deferredPrompt) return
+        if (!deferredPrompt && !isIOS) {
+            // No native prompt available, show manual instructions
+            Swal.fire({
+                title: 'Install Budget Tracker',
+                html: `
+                    <div class="text-left space-y-3">
+                        <p class="text-sm text-gray-700 mb-3">
+                            <strong>Quick Install Method:</strong>
+                        </p>
+                        <ol class="list-decimal list-inside space-y-2 text-sm text-gray-700">
+                            <li>Tap the <strong>menu button (⋮)</strong> at the top-right</li>
+                            <li>Tap <strong>"Add to Home screen"</strong> or <strong>"Install app"</strong></li>
+                            <li>Tap <strong>"Install"</strong> or <strong>"Add"</strong></li>
+                        </ol>
+                        <div class="mt-4 p-3 bg-amber-50 border-l-4 border-amber-400 rounded">
+                            <p class="text-xs text-amber-800 font-medium mb-1">
+                                ⚠️ Can't find "Install app"?
+                            </p>
+                            <p class="text-xs text-amber-700">
+                                Chrome blocks reinstallation after uninstalling. Instead:
+                            </p>
+                            <ol class="list-decimal list-inside space-y-1 text-xs text-amber-700 mt-2 ml-2">
+                                <li>Go to <strong>chrome://flags</strong> in your browser</li>
+                                <li>Search for <strong>"bypass app banner"</strong></li>
+                                <li>Enable it and restart Chrome</li>
+                            </ol>
+                        </div>
+                    </div>
+                `,
+                confirmButtonText: 'Got it!',
+                confirmButtonColor: '#3b82f6',
+                width: '95%',
+                padding: '1.5rem',
+            })
+            return
+        }
 
-        deferredPrompt.prompt()
+        if (isIOS || !deferredPrompt) {
+            // iOS doesn't need action here, instructions are already shown
+            return
+        }
+
+        await deferredPrompt.prompt()
         const { outcome } = await deferredPrompt.userChoice
 
         if (outcome === 'accepted') {
@@ -63,7 +94,7 @@ export function InstallPrompt() {
 
     const handleDismiss = () => {
         setShowPrompt(false)
-        localStorage.setItem('pwa-prompt-dismissed', Date.now().toString())
+        // Removed localStorage saving - prompt will show again on next page load
     }
 
     if (!showPrompt) return null
@@ -100,7 +131,7 @@ export function InstallPrompt() {
                     </button>
                 </div>
 
-                {!isIOS && deferredPrompt && (
+                {!isIOS && (
                     <div className="flex gap-2 mt-3">
                         <button
                             onClick={handleDismiss}
@@ -112,7 +143,7 @@ export function InstallPrompt() {
                             onClick={handleInstall}
                             className="flex-1 px-4 py-2 text-sm font-medium bg-white text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                         >
-                            Install
+                            {deferredPrompt ? 'Install' : 'How to Install'}
                         </button>
                     </div>
                 )}
