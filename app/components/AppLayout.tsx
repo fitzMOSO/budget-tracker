@@ -24,6 +24,7 @@ import { cn } from '../utils'
 import { useBudget } from '../context/BudgetContext'
 import { getMonthName, getMonthYear } from '../utils'
 import { QuickActions } from './QuickActions'
+import { InstallButton } from './InstallButton'
 
 interface NavItem {
     href: string
@@ -217,6 +218,7 @@ export function AppLayout({ children, selectedMonth, selectedYear, onMonthChange
                                 selectedYear={selectedYear}
                                 onMonthChange={onMonthChange}
                             />
+                            <InstallButton />
                             <QuickActions />
                         </div>
                     </div>
