@@ -58,11 +58,12 @@
             "name": "Add Expense",
             "short_name": "Expense",
             "description": "Quickly add a new expense",
-            "url": "/expenses?action=add",
+            "url": "/quick-add?type=expense",
             "icons": [
                 {
                     "src": "/icons/android-launchericon-96-96.png",
-                    "sizes": "96x96"
+                    "sizes": "96x96",
+                    "type": "image/png"
                 }
             ]
         },
@@ -70,11 +71,25 @@
             "name": "Add Income",
             "short_name": "Income",
             "description": "Quickly add a new income",
-            "url": "/income?action=add",
+            "url": "/quick-add?type=income",
             "icons": [
                 {
                     "src": "/icons/android-launchericon-96-96.png",
-                    "sizes": "96x96"
+                    "sizes": "96x96",
+                    "type": "image/png"
+                }
+            ]
+        },
+        {
+            "name": "Transfer Funds",
+            "short_name": "Transfer",
+            "description": "Transfer between accounts",
+            "url": "/quick-add?type=transfer",
+            "icons": [
+                {
+                    "src": "/icons/android-launchericon-96-96.png",
+                    "sizes": "96x96",
+                    "type": "image/png"
                 }
             ]
         },
@@ -86,7 +101,8 @@
             "icons": [
                 {
                     "src": "/icons/android-launchericon-96-96.png",
-                    "sizes": "96x96"
+                    "sizes": "96x96",
+                    "type": "image/png"
                 }
             ]
         }
