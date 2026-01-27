@@ -170,8 +170,22 @@ function reducer(state: AppState, action: Action): AppState {
             }
 
         // Income
-        case 'ADD_INCOME':
-            return { ...state, incomes: [...state.incomes, action.payload] }
+        case 'ADD_INCOME': {
+            const income = action.payload
+            // If accountId is provided, add the amount to the account balance
+            if (income.accountId) {
+                return {
+                    ...state,
+                    incomes: [...state.incomes, income],
+                    accounts: state.accounts.map((a) =>
+                        a.id === income.accountId
+                            ? { ...a, balance: a.balance + income.amount }
+                            : a
+                    ),
+                }
+            }
+            return { ...state, incomes: [...state.incomes, income] }
+        }
 
         case 'UPDATE_INCOME':
             return {
@@ -188,8 +202,22 @@ function reducer(state: AppState, action: Action): AppState {
             }
 
         // Expenses
-        case 'ADD_EXPENSE':
-            return { ...state, expenses: [...state.expenses, action.payload] }
+        case 'ADD_EXPENSE': {
+            const expense = action.payload
+            // If accountId is provided, deduct the amount from the account balance
+            if (expense.accountId) {
+                return {
+                    ...state,
+                    expenses: [...state.expenses, expense],
+                    accounts: state.accounts.map((a) =>
+                        a.id === expense.accountId
+                            ? { ...a, balance: a.balance - expense.amount }
+                            : a
+                    ),
+                }
+            }
+            return { ...state, expenses: [...state.expenses, expense] }
+        }
 
         case 'UPDATE_EXPENSE':
             return {

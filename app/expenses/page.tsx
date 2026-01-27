@@ -46,7 +46,6 @@ export default function ExpensesPage() {
     const [formData, setFormData] = useState({
         description: '',
         amount: '',
-        budgetAmount: '',
         date: getTodayISO(),
         categoryId: '',
         expenseType: 'essential' as ExpenseType,
@@ -89,7 +88,6 @@ export default function ExpensesPage() {
         setFormData({
             description: '',
             amount: '',
-            budgetAmount: '',
             date: getTodayISO(),
             categoryId: expenseCategories[0]?.id || '',
             expenseType: 'essential',
@@ -105,7 +103,6 @@ export default function ExpensesPage() {
             setFormData({
                 description: expense.description,
                 amount: expense.amount.toString(),
-                budgetAmount: expense.budgetAmount?.toString() || '',
                 date: expense.date,
                 categoryId: expense.categoryId,
                 expenseType: expense.expenseType,
@@ -129,7 +126,6 @@ export default function ExpensesPage() {
         const expenseData = {
             description: formData.description,
             amount: parseFloat(formData.amount),
-            budgetAmount: formData.budgetAmount ? parseFloat(formData.budgetAmount) : undefined,
             date: formData.date,
             categoryId: formData.categoryId,
             expenseType: formData.expenseType,
@@ -364,25 +360,15 @@ export default function ExpensesPage() {
                         placeholder="e.g., Groceries, Electric bill"
                     />
 
-                    <div className="grid grid-cols-2 gap-4">
-                        <Input
-                            label="Budget Amount"
-                            type="number"
-                            step="0.01"
-                            value={formData.budgetAmount}
-                            onChange={(e) => setFormData({ ...formData, budgetAmount: e.target.value })}
-                            placeholder="0.00"
-                        />
-                        <Input
-                            label="Actual Amount"
-                            type="number"
-                            step="0.01"
-                            value={formData.amount}
-                            onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
-                            placeholder="0.00"
-                            required
-                        />
-                    </div>
+                    <Input
+                        label="Amount"
+                        type="number"
+                        step="0.01"
+                        value={formData.amount}
+                        onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
+                        placeholder="0.00"
+                        required
+                    />
 
                     <div className="grid grid-cols-2 gap-4">
                         <Input
