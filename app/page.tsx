@@ -50,10 +50,6 @@ export default function DashboardPage() {
     [state.savingsContributions, selectedMonth, selectedYear]
   )
 
-  const monthlyCreditCardStatements = useMemo(
-    () => filterByMonth(state.creditCardStatements, selectedMonth, selectedYear),
-    [state.creditCardStatements, selectedMonth, selectedYear]
-  )
 
   // Calculate budget summary
   const budgetSummary = useMemo(
@@ -98,7 +94,7 @@ export default function DashboardPage() {
           />
           <CreditCardSummary
             creditCards={state.creditCards}
-            statements={monthlyCreditCardStatements}
+            statements={state.creditCardStatements}
             settings={state.settings}
           />
         </div>

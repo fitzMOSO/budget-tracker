@@ -123,6 +123,11 @@ function QuickAddContent() {
     const handleTransferSubmit = (e: React.FormEvent) => {
         e.preventDefault()
 
+        if (!transferData.fromAccountId || !transferData.toAccountId) {
+            showError('Please select both accounts')
+            return
+        }
+
         if (transferData.fromAccountId === transferData.toAccountId) {
             showError('Cannot transfer to the same account!')
             return
@@ -172,7 +177,7 @@ function QuickAddContent() {
     }
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+        <div className="min-h-screen bg-linear-to-br from-blue-50 to-indigo-100 p-4">
             <div className="max-w-md mx-auto pt-8">
                 {/* Header */}
                 <div className="flex items-center justify-between mb-6">
@@ -188,8 +193,8 @@ function QuickAddContent() {
                     <button
                         onClick={() => router.push('/quick-add?type=expense')}
                         className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-lg font-medium transition-colors ${type === 'expense'
-                                ? 'bg-red-600 text-white'
-                                : 'bg-white text-gray-700 hover:bg-red-50'
+                            ? 'bg-red-600 text-white'
+                            : 'bg-white text-gray-700 hover:bg-red-50'
                             }`}
                     >
                         <TrendingDown className="w-4 h-4" />
@@ -198,8 +203,8 @@ function QuickAddContent() {
                     <button
                         onClick={() => router.push('/quick-add?type=income')}
                         className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-lg font-medium transition-colors ${type === 'income'
-                                ? 'bg-green-600 text-white'
-                                : 'bg-white text-gray-700 hover:bg-green-50'
+                            ? 'bg-green-600 text-white'
+                            : 'bg-white text-gray-700 hover:bg-green-50'
                             }`}
                     >
                         <TrendingUp className="w-4 h-4" />
@@ -208,8 +213,8 @@ function QuickAddContent() {
                     <button
                         onClick={() => router.push('/quick-add?type=transfer')}
                         className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-lg font-medium transition-colors ${type === 'transfer'
-                                ? 'bg-blue-600 text-white'
-                                : 'bg-white text-gray-700 hover:bg-blue-50'
+                            ? 'bg-blue-600 text-white'
+                            : 'bg-white text-gray-700 hover:bg-blue-50'
                             }`}
                     >
                         <ArrowLeftRight className="w-4 h-4" />

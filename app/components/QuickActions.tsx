@@ -63,6 +63,11 @@ export function QuickActions() {
     const handleTransferSubmit = (e: React.FormEvent) => {
         e.preventDefault()
 
+        if (!transferData.fromAccountId || !transferData.toAccountId) {
+            showError('Please select both accounts')
+            return
+        }
+
         if (transferData.fromAccountId === transferData.toAccountId) {
             showError('Cannot transfer to the same account!')
             return

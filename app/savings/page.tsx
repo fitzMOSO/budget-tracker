@@ -62,6 +62,7 @@ export default function SavingsPage() {
         targetAmount: '',
         deadline: '',
         color: 'bg-blue-600',
+        linkedAccountId: '',
     })
 
     // Contribution form state
@@ -96,6 +97,7 @@ export default function SavingsPage() {
             targetAmount: '',
             deadline: '',
             color: 'bg-blue-600',
+            linkedAccountId: '',
         })
         setEditingGoal(null)
     }
@@ -108,6 +110,7 @@ export default function SavingsPage() {
                 targetAmount: goal.targetAmount.toString(),
                 deadline: goal.deadline || '',
                 color: goal.color || 'bg-blue-600',
+                linkedAccountId: goal.linkedAccountId || '',
             })
         } else {
             resetGoalForm()
@@ -123,16 +126,25 @@ export default function SavingsPage() {
     const handleSubmitGoal = (e: React.FormEvent) => {
         e.preventDefault()
 
+        const linkedAccount = goalFormData.linkedAccountId
+            ? state.accounts.find(a => a.id === goalFormData.linkedAccountId)
+            : undefined
+
         const goalData = {
             name: goalFormData.name,
             targetAmount: parseFloat(goalFormData.targetAmount),
             deadline: goalFormData.deadline || undefined,
             color: goalFormData.color,
-            currentAmount: 0,
+            currentAmount: linkedAccount ? linkedAccount.balance : 0,
+            linkedAccountId: goalFormData.linkedAccountId || undefined,
         }
 
         if (editingGoal) {
-            updateSavingsGoal({ ...goalData, id: editingGoal.id, currentAmount: editingGoal.currentAmount })
+            updateSavingsGoal({
+                ...goalData,
+                id: editingGoal.id,
+                currentAmount: linkedAccount ? linkedAccount.balance : editingGoal.currentAmount,
+            })
             showSuccess('Savings goal updated!')
         } else {
             addSavingsGoal(goalData)
@@ -470,6 +482,17 @@ export default function SavingsPage() {
                         value={goalFormData.color}
                         onChange={(e) => setGoalFormData({ ...goalFormData, color: e.target.value })}
                         options={GOAL_COLORS}
+                    />
+
+                    <Select
+                        label="Linked Savings Account (optional)"
+                        value={goalFormData.linkedAccountId}
+                        onChange={(e) => setGoalFormData({ ...goalFormData, linkedAccountId: e.target.value })}
+                        options={state.accounts.map((a) => ({
+                            value: a.id,
+                            label: `${a.name} (${formatCurrency(a.balance, state.settings)})`,
+                        }))}
+                        placeholder="Select account"
                     />
 
                     <div className="flex justify-end gap-3 pt-4">

@@ -24,6 +24,10 @@ const Toast = Swal.mixin({
     },
     didOpen: (toast) => {
         toast.style.pointerEvents = 'auto'
+        const container = Swal.getContainer()
+        if (container) {
+            container.style.zIndex = '10010'
+        }
         toast.onmouseenter = Swal.stopTimer
         toast.onmouseleave = Swal.resumeTimer
     }
@@ -77,6 +81,9 @@ export const showConfirm = async (
         cancelButtonColor: '#d33',
         confirmButtonText,
         cancelButtonText,
+        didOpen: (popup) => {
+            try { if (popup && (popup as HTMLElement).style) (popup as HTMLElement).style.zIndex = '10010' } catch (e) { /* ignore */ }
+        }
     })
     return result.isConfirmed
 }
@@ -87,7 +94,7 @@ export const showDeleteConfirm = async (itemName: string = 'this item', addition
     if (additionalText) {
         text = `You are about to delete ${itemName}. ${additionalText} This action cannot be undone!`
     }
-    
+
     const result = await Swal.fire({
         title: 'Are you sure?',
         text,
@@ -97,6 +104,9 @@ export const showDeleteConfirm = async (itemName: string = 'this item', addition
         cancelButtonColor: '#6b7280',
         confirmButtonText: 'Yes, delete it!',
         cancelButtonText: 'Cancel',
+        didOpen: (popup) => {
+            try { if (popup && (popup as HTMLElement).style) (popup as HTMLElement).style.zIndex = '10010' } catch (e) { /* ignore */ }
+        }
     })
     return result.isConfirmed
 }
@@ -202,11 +212,11 @@ export const showPaymentDialog = async (
                             className="w-full border border-gray-200 rounded-lg p-3 h-12 bg-white focus:outline-none focus:ring-2 focus:ring-blue-200"
                         >
                             {accounts.map(a => {
-                                    const label = a.balance != null
-                                        ? `${a.name} (${currencySymbol}${a.balance.toLocaleString('en-US', { minimumFractionDigits: 2 })})`
-                                        : a.name
-                                    return <option key={a.id} value={a.id}>{label}</option>
-                                })}
+                                const label = a.balance != null
+                                    ? `${a.name} (${currencySymbol}${a.balance.toLocaleString('en-US', { minimumFractionDigits: 2 })})`
+                                    : a.name
+                                return <option key={a.id} value={a.id}>{label}</option>
+                            })}
                         </select>
                         {error && <p className="text-sm text-red-600 mt-2">{error}</p>}
                     </div>

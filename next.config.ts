@@ -7,50 +7,13 @@ const nextConfig: NextConfig = {
   images: {
     unoptimized: true,
   },
-  // PWA configuration
-  async headers() {
-    return [
-      {
-        source: '/sw.js',
-        headers: [
-          {
-            key: 'Cache-Control',
-            value: 'public, max-age=0, must-revalidate',
-          },
-          {
-            key: 'Service-Worker-Allowed',
-            value: '/',
-          },
-        ],
-      },
-      {
-        source: '/manifest.json',
-        headers: [
-          {
-            key: 'Cache-Control',
-            value: 'public, max-age=604800', // 1 week
-          },
-        ],
-      },
-      {
-        source: '/(.*)',
-        headers: [
-          {
-            key: 'X-Content-Type-Options',
-            value: 'nosniff',
-          },
-          {
-            key: 'X-Frame-Options',
-            value: 'DENY',
-          },
-          {
-            key: 'X-XSS-Protection',
-            value: '1; mode=block',
-          },
-        ],
-      },
-    ];
-  },
+  // Note: headers() is not supported with output: 'export'. Cache headers should be
+  // configured at the server level (e.g., .vercel/config.json for Vercel, or netlify.toml for Netlify).
+  // For PWA cache control, configure headers in your deployment platform instead.
+
+  // Note: Next 16 uses Turbopack by default for dev. Avoid adding a custom `webpack` function
+  // here unless you intend to use webpack. If you experience unreliable file-watch events
+  // on Windows or network drives, prefer setting polling via environment variables (see README).
 };
 
 export default nextConfig;

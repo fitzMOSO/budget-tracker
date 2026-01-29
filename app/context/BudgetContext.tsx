@@ -127,11 +127,20 @@ function reducer(state: AppState, action: Action): AppState {
             return { ...state, accounts: [...state.accounts, action.payload] }
 
         case 'UPDATE_ACCOUNT':
-            return {
-                ...state,
-                accounts: state.accounts.map((a) =>
+            {
+                const updatedAccounts = state.accounts.map((a) =>
                     a.id === action.payload.id ? action.payload : a
-                ),
+                )
+                const syncedGoals = state.savingsGoals.map((g) => {
+                    if (!g.linkedAccountId) return g
+                    const linkedAccount = updatedAccounts.find((a) => a.id === g.linkedAccountId)
+                    return linkedAccount ? { ...g, currentAmount: linkedAccount.balance } : g
+                })
+                return {
+                    ...state,
+                    accounts: updatedAccounts,
+                    savingsGoals: syncedGoals,
+                }
             }
 
         case 'DELETE_ACCOUNT':
@@ -141,9 +150,8 @@ function reducer(state: AppState, action: Action): AppState {
             }
 
         case 'UPDATE_ACCOUNT_BALANCE':
-            return {
-                ...state,
-                accounts: state.accounts.map((a) =>
+            {
+                const updatedAccounts = state.accounts.map((a) =>
                     a.id === action.payload.id
                         ? {
                             ...a,
@@ -152,13 +160,28 @@ function reducer(state: AppState, action: Action): AppState {
                                 : a.balance - action.payload.amount
                         }
                         : a
-                ),
+                )
+                const syncedGoals = state.savingsGoals.map((g) => {
+                    if (!g.linkedAccountId) return g
+                    const linkedAccount = updatedAccounts.find((a) => a.id === g.linkedAccountId)
+                    return linkedAccount ? { ...g, currentAmount: linkedAccount.balance } : g
+                })
+                return {
+                    ...state,
+                    accounts: updatedAccounts,
+                    savingsGoals: syncedGoals,
+                }
             }
 
         case 'TRANSFER_FUNDS':
-            return {
-                ...state,
-                accounts: state.accounts.map((a) => {
+            {
+                const linkedGoals = state.savingsGoals.filter(
+                    (g) => g.linkedAccountId === action.payload.toAccountId
+                )
+                const linkedSourceGoals = state.savingsGoals.filter(
+                    (g) => g.linkedAccountId === action.payload.fromAccountId
+                )
+                const updatedAccounts = state.accounts.map((a) => {
                     if (a.id === action.payload.fromAccountId) {
                         return { ...a, balance: a.balance - action.payload.amount }
                     }
@@ -166,7 +189,34 @@ function reducer(state: AppState, action: Action): AppState {
                         return { ...a, balance: a.balance + action.payload.amount }
                     }
                     return a
-                }),
+                })
+                const syncedGoals = state.savingsGoals.map((g) => {
+                    if (!g.linkedAccountId) return g
+                    const linkedAccount = updatedAccounts.find((a) => a.id === g.linkedAccountId)
+                    return linkedAccount ? { ...g, currentAmount: linkedAccount.balance } : g
+                })
+                const transferContributions: SavingsContribution[] = linkedGoals.map((goal) => ({
+                    id: uuidv4(),
+                    savingsGoalId: goal.id,
+                    amount: action.payload.amount,
+                    date: new Date().toISOString().slice(0, 10),
+                    fromAccountId: action.payload.fromAccountId,
+                    notes: 'Transfer to linked savings account',
+                }))
+                const transferOutContributions: SavingsContribution[] = linkedSourceGoals.map((goal) => ({
+                    id: uuidv4(),
+                    savingsGoalId: goal.id,
+                    amount: -action.payload.amount,
+                    date: new Date().toISOString().slice(0, 10),
+                    fromAccountId: action.payload.fromAccountId,
+                    notes: 'Transfer out of linked savings account',
+                }))
+                return {
+                    ...state,
+                    accounts: updatedAccounts,
+                    savingsGoals: syncedGoals,
+                    savingsContributions: [...state.savingsContributions, ...transferContributions, ...transferOutContributions],
+                }
             }
 
         // Income
@@ -560,46 +610,19 @@ function reducer(state: AppState, action: Action): AppState {
 
         // Credit Card Statements
         case 'ADD_STATEMENT': {
-            // Update the credit card's available limit: reduce by unpaid balance
-            const updatedCards = state.creditCards.map((card) => {
-                if (card.id === action.payload.creditCardId && card.currentAvailableLimit !== undefined) {
-                    // Reduce available limit by the unpaid balance
-                    const unpaidBalance = action.payload.statementBalance - action.payload.amountPaid
-                    const newAvailableLimit = card.currentAvailableLimit - unpaidBalance
-                    return { ...card, currentAvailableLimit: Math.max(0, newAvailableLimit) }
-                }
-                return card
-            })
-
             return {
                 ...state,
                 creditCardStatements: [...state.creditCardStatements, action.payload],
-                creditCards: updatedCards,
             }
         }
 
         case 'UPDATE_STATEMENT': {
-            const oldStatement = state.creditCardStatements.find((s) => s.id === action.payload.id)
             const updatedStatements = state.creditCardStatements.map((s) =>
                 s.id === action.payload.id ? action.payload : s
             )
-
-            // Update the credit card's available limit by adding the payment difference
-            const updatedCards = state.creditCards.map((card) => {
-                if (card.id === action.payload.creditCardId && oldStatement && card.currentAvailableLimit !== undefined) {
-                    // Calculate how much more was paid
-                    const paymentDifference = action.payload.amountPaid - oldStatement.amountPaid
-                    // Add the payment difference to available limit
-                    const newAvailableLimit = card.currentAvailableLimit + paymentDifference
-                    return { ...card, currentAvailableLimit: Math.max(0, newAvailableLimit) }
-                }
-                return card
-            })
-
             return {
                 ...state,
                 creditCardStatements: updatedStatements,
-                creditCards: updatedCards,
             }
         }
 
@@ -614,11 +637,19 @@ function reducer(state: AppState, action: Action): AppState {
             return { ...state, savingsGoals: [...state.savingsGoals, action.payload] }
 
         case 'UPDATE_SAVINGS_GOAL':
-            return {
-                ...state,
-                savingsGoals: state.savingsGoals.map((g) =>
+            {
+                const updatedGoals = state.savingsGoals.map((g) =>
                     g.id === action.payload.id ? action.payload : g
-                ),
+                )
+                const syncedGoals = updatedGoals.map((g) => {
+                    if (!g.linkedAccountId) return g
+                    const linkedAccount = state.accounts.find((a) => a.id === g.linkedAccountId)
+                    return linkedAccount ? { ...g, currentAmount: linkedAccount.balance } : g
+                })
+                return {
+                    ...state,
+                    savingsGoals: syncedGoals,
+                }
             }
 
         case 'DELETE_SAVINGS_GOAL':
@@ -631,18 +662,45 @@ function reducer(state: AppState, action: Action): AppState {
         case 'ADD_SAVINGS_CONTRIBUTION': {
             const contribution = action.payload
             const fromAccountId = contribution.fromAccountId
+            const goal = state.savingsGoals.find((g) => g.id === contribution.savingsGoalId)
+            const linkedAccountId = goal?.linkedAccountId
+
+            let updatedAccounts = state.accounts
+
+            if (fromAccountId && fromAccountId !== linkedAccountId) {
+                updatedAccounts = updatedAccounts.map((acc) =>
+                    acc.id === fromAccountId
+                        ? { ...acc, balance: acc.balance - contribution.amount }
+                        : acc
+                )
+            }
+
+            if (linkedAccountId && linkedAccountId !== fromAccountId) {
+                updatedAccounts = updatedAccounts.map((acc) =>
+                    acc.id === linkedAccountId
+                        ? { ...acc, balance: acc.balance + contribution.amount }
+                        : acc
+                )
+            }
+
+            const updatedGoals = state.savingsGoals.map((g) =>
+                g.id === contribution.savingsGoalId && !g.linkedAccountId
+                    ? { ...g, currentAmount: g.currentAmount + contribution.amount }
+                    : g
+            )
+
+            const syncedGoals = updatedGoals.map((g) => {
+                if (!g.linkedAccountId) return g
+                const linkedAccount = updatedAccounts.find((a) => a.id === g.linkedAccountId)
+                return linkedAccount ? { ...g, currentAmount: linkedAccount.balance } : g
+            })
 
             return {
                 ...state,
                 savingsContributions: [...state.savingsContributions, contribution],
                 // Deduct contribution amount from the source account
-                accounts: fromAccountId
-                    ? state.accounts.map((acc) =>
-                        acc.id === fromAccountId
-                            ? { ...acc, balance: acc.balance - contribution.amount }
-                            : acc
-                    )
-                    : state.accounts,
+                accounts: updatedAccounts,
+                savingsGoals: syncedGoals,
             }
         }
 
@@ -651,11 +709,17 @@ function reducer(state: AppState, action: Action): AppState {
             const oldContribution = state.savingsContributions.find((c) => c.id === updatedContribution.id)
             const oldAccountId = oldContribution?.fromAccountId
             const newAccountId = updatedContribution.fromAccountId
+            const oldGoal = oldContribution
+                ? state.savingsGoals.find((g) => g.id === oldContribution.savingsGoalId)
+                : undefined
+            const newGoal = state.savingsGoals.find((g) => g.id === updatedContribution.savingsGoalId)
+            const oldLinkedAccountId = oldGoal?.linkedAccountId
+            const newLinkedAccountId = newGoal?.linkedAccountId
 
             let updatedAccounts = state.accounts
 
             // Refund the old account if it had one
-            if (oldAccountId && oldContribution) {
+            if (oldAccountId && oldContribution && oldAccountId !== oldLinkedAccountId) {
                 updatedAccounts = updatedAccounts.map((acc) =>
                     acc.id === oldAccountId
                         ? { ...acc, balance: acc.balance + oldContribution.amount }
@@ -663,8 +727,17 @@ function reducer(state: AppState, action: Action): AppState {
                 )
             }
 
+            // Remove from old linked account if applicable
+            if (oldLinkedAccountId && oldContribution && oldLinkedAccountId !== oldAccountId) {
+                updatedAccounts = updatedAccounts.map((acc) =>
+                    acc.id === oldLinkedAccountId
+                        ? { ...acc, balance: acc.balance - oldContribution.amount }
+                        : acc
+                )
+            }
+
             // Deduct from the new account if specified
-            if (newAccountId) {
+            if (newAccountId && newAccountId !== newLinkedAccountId) {
                 updatedAccounts = updatedAccounts.map((acc) =>
                     acc.id === newAccountId
                         ? { ...acc, balance: acc.balance - updatedContribution.amount }
@@ -672,30 +745,100 @@ function reducer(state: AppState, action: Action): AppState {
                 )
             }
 
+            // Add to new linked account if applicable
+            if (newLinkedAccountId && newLinkedAccountId !== newAccountId) {
+                updatedAccounts = updatedAccounts.map((acc) =>
+                    acc.id === newLinkedAccountId
+                        ? { ...acc, balance: acc.balance + updatedContribution.amount }
+                        : acc
+                )
+            }
+
+            // Update savings goals amounts (only for unlinked goals)
+            let updatedGoals = state.savingsGoals
+            if (oldContribution) {
+                if (oldContribution.savingsGoalId !== updatedContribution.savingsGoalId) {
+                    updatedGoals = state.savingsGoals.map((g) => {
+                        if (g.id === oldContribution.savingsGoalId && !g.linkedAccountId) {
+                            return { ...g, currentAmount: g.currentAmount - oldContribution.amount }
+                        }
+                        if (g.id === updatedContribution.savingsGoalId && !g.linkedAccountId) {
+                            return { ...g, currentAmount: g.currentAmount + updatedContribution.amount }
+                        }
+                        return g
+                    })
+                } else {
+                    const diff = updatedContribution.amount - oldContribution.amount
+                    updatedGoals = state.savingsGoals.map((g) =>
+                        g.id === updatedContribution.savingsGoalId && !g.linkedAccountId
+                            ? { ...g, currentAmount: g.currentAmount + diff }
+                            : g
+                    )
+                }
+            }
+
+            const syncedGoals = updatedGoals.map((g) => {
+                if (!g.linkedAccountId) return g
+                const linkedAccount = updatedAccounts.find((a) => a.id === g.linkedAccountId)
+                return linkedAccount ? { ...g, currentAmount: linkedAccount.balance } : g
+            })
+
             return {
                 ...state,
                 savingsContributions: state.savingsContributions.map((c) =>
                     c.id === updatedContribution.id ? updatedContribution : c
                 ),
                 accounts: updatedAccounts,
+                savingsGoals: syncedGoals,
             }
         }
 
         case 'DELETE_SAVINGS_CONTRIBUTION': {
             const contributionToDelete = state.savingsContributions.find((c) => c.id === action.payload)
             const refundAccountId = contributionToDelete?.fromAccountId
+            const goal = contributionToDelete
+                ? state.savingsGoals.find((g) => g.id === contributionToDelete.savingsGoalId)
+                : undefined
+            const linkedAccountId = goal?.linkedAccountId
+
+            let updatedAccounts = state.accounts
+
+            if (refundAccountId && contributionToDelete && refundAccountId !== linkedAccountId) {
+                updatedAccounts = updatedAccounts.map((acc) =>
+                    acc.id === refundAccountId
+                        ? { ...acc, balance: acc.balance + contributionToDelete.amount }
+                        : acc
+                )
+            }
+
+            if (linkedAccountId && contributionToDelete && linkedAccountId !== refundAccountId) {
+                updatedAccounts = updatedAccounts.map((acc) =>
+                    acc.id === linkedAccountId
+                        ? { ...acc, balance: acc.balance - contributionToDelete.amount }
+                        : acc
+                )
+            }
+
+            const updatedGoalsAfterDelete = contributionToDelete
+                ? state.savingsGoals.map((g) =>
+                    g.id === contributionToDelete.savingsGoalId && !g.linkedAccountId
+                        ? { ...g, currentAmount: g.currentAmount - contributionToDelete.amount }
+                        : g
+                )
+                : state.savingsGoals
+
+            const syncedGoals = updatedGoalsAfterDelete.map((g) => {
+                if (!g.linkedAccountId) return g
+                const linkedAccount = updatedAccounts.find((a) => a.id === g.linkedAccountId)
+                return linkedAccount ? { ...g, currentAmount: linkedAccount.balance } : g
+            })
 
             return {
                 ...state,
                 savingsContributions: state.savingsContributions.filter((c) => c.id !== action.payload),
                 // Refund contribution amount back to the source account
-                accounts: refundAccountId && contributionToDelete
-                    ? state.accounts.map((acc) =>
-                        acc.id === refundAccountId
-                            ? { ...acc, balance: acc.balance + contributionToDelete.amount }
-                            : acc
-                    )
-                    : state.accounts,
+                accounts: updatedAccounts,
+                savingsGoals: syncedGoals,
             }
         }
 

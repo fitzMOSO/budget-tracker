@@ -101,6 +101,7 @@ export interface SavingsGoal {
   currentAmount: number;
   deadline?: string;
   color?: string;
+  linkedAccountId?: string;
 }
 
 export interface SavingsContribution {

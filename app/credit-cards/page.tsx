@@ -99,18 +99,23 @@ export default function CreditCardsPage() {
     }
 
     // Filter statements by selected month
-    const monthlyStatements = useMemo(
+    const filteredStatements = useMemo(
         () => filterByMonth(state.creditCardStatements, selectedMonth, selectedYear),
         [state.creditCardStatements, selectedMonth, selectedYear]
     )
 
+    const visibleStatements = useMemo(
+        () => (filteredStatements.length > 0 ? filteredStatements : state.creditCardStatements),
+        [filteredStatements, state.creditCardStatements]
+    )
+
     // Calculate totals
-    const totalBalance = monthlyStatements.reduce(
+    const totalBalance = visibleStatements.reduce(
         (sum, s) => sum + calculateCreditCardBalance(s),
         0
     )
-    const totalStatementBalance = monthlyStatements.reduce((sum, s) => sum + s.statementBalance, 0)
-    const totalPaid = monthlyStatements.reduce((sum, s) => sum + s.amountPaid, 0)
+    const totalStatementBalance = visibleStatements.reduce((sum, s) => sum + s.statementBalance, 0)
+    const totalPaid = visibleStatements.reduce((sum, s) => sum + s.amountPaid, 0)
 
     // Card Modal Functions
     const resetCardForm = () => {
@@ -465,7 +470,7 @@ export default function CreditCardsPage() {
                         ) : (
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                 {state.creditCards.map((card: CreditCard) => {
-                                    const cardStatements = monthlyStatements.filter(
+                                    const cardStatements = visibleStatements.filter(
                                         (s: CreditCardStatement) => s.creditCardId === card.id
                                     )
                                     const latestStatement = cardStatements.sort(
@@ -603,7 +608,7 @@ export default function CreditCardsPage() {
                     </CardHeader>
                     <CardContent>
                         <DataTable
-                            data={monthlyStatements}
+                            data={visibleStatements}
                             columns={statementColumns}
                             customActions={(statement) => (
                                 calculateCreditCardBalance(statement) > 0 && (
@@ -617,7 +622,7 @@ export default function CreditCardsPage() {
                             )}
                             onEdit={handleOpenStatementModal}
                             onDelete={handleDeleteStatement}
-                            emptyMessage="No statements for this month"
+                            emptyMessage="No statements recorded"
                         />
                     </CardContent>
                 </Card>

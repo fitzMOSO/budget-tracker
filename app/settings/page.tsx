@@ -167,7 +167,19 @@ export default function SettingsPage() {
             const backupData = {
                 version: '1.0.0',
                 exportDate: new Date().toISOString(),
-                data: state,
+                data: {
+                    categories: state.categories,
+                    accounts: state.accounts,
+                    incomes: state.incomes,
+                    expenses: state.expenses,
+                    bills: state.bills,
+                    creditCards: state.creditCards,
+                    creditCardStatements: state.creditCardStatements,
+                    savingsGoals: state.savingsGoals,
+                    savingsContributions: state.savingsContributions,
+                    monthlyBudgets: state.monthlyBudgets,
+                    settings: state.settings,
+                },
             }
             const dataStr = JSON.stringify(backupData, null, 2)
             const blob = new Blob([dataStr], { type: 'application/json' })
