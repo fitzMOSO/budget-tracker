@@ -79,6 +79,7 @@ function MonthSelector({ selectedMonth, selectedYear, onMonthChange }: MonthSele
         <div className="flex items-center gap-1 bg-gray-50 rounded-xl border border-gray-200/80 px-1.5 py-1">
             <button
                 onClick={handlePrevMonth}
+                aria-label="Previous month"
                 className="p-1.5 hover:bg-white rounded-lg transition-all duration-200 hover:shadow-sm active:scale-95"
             >
                 <ChevronLeft className="w-4 h-4 text-gray-500" />
@@ -88,6 +89,7 @@ function MonthSelector({ selectedMonth, selectedYear, onMonthChange }: MonthSele
             </span>
             <button
                 onClick={handleNextMonth}
+                aria-label="Next month"
                 className="p-1.5 hover:bg-white rounded-lg transition-all duration-200 hover:shadow-sm active:scale-95"
             >
                 <ChevronRight className="w-4 h-4 text-gray-500" />
@@ -115,6 +117,7 @@ export function AppLayout({ children, selectedMonth, selectedYear, onMonthChange
                 <div className="flex items-center justify-between">
                     <button
                         onClick={() => setIsSidebarOpen(true)}
+                        aria-label="Open sidebar"
                         className="p-2 text-gray-600 hover:bg-gray-100 rounded-xl transition-colors active:scale-95"
                     >
                         <Menu className="w-5 h-5" />
@@ -157,6 +160,7 @@ export function AppLayout({ children, selectedMonth, selectedYear, onMonthChange
                         </div>
                         <button
                             onClick={() => setIsSidebarOpen(false)}
+                            aria-label="Close sidebar"
                             className="lg:hidden p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
                         >
                             <X className="w-5 h-5" />
@@ -251,6 +255,7 @@ export function AppLayout({ children, selectedMonth, selectedYear, onMonthChange
                     })}
                     <button
                         onClick={() => setIsSidebarOpen(true)}
+                        aria-label="More navigation options"
                         className="flex flex-col items-center gap-1 px-4 py-2 rounded-xl min-w-[64px] text-gray-400 active:bg-gray-100 active:scale-95 transition-all duration-200"
                     >
                         <MoreHorizontal className="w-5 h-5" />

@@ -14,6 +14,7 @@ const nextConfig: NextConfig = {
   // Note: Next 16 uses Turbopack by default for dev. Avoid adding a custom `webpack` function
   // here unless you intend to use webpack. If you experience unreliable file-watch events
   // on Windows or network drives, prefer setting polling via environment variables (see README).
+  allowedDevOrigins: ['https://*.cloudworkstations.dev'],
 };
 
 export default nextConfig;

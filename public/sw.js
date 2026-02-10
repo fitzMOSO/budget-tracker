@@ -1,119 +1,90 @@
-const CACHE_NAME = 'budget-tracker-v1'
+const CACHE_NAME = 'budget-tracker-v2';
 const STATIC_ASSETS = [
     '/',
     '/manifest.json',
     '/icons/icon-192.png',
     '/icons/icon-512.png',
     '/icons/apple-touch-icon.png',
-]
+    '/widget.html',
+];
 
-// Install event - cache static assets
 self.addEventListener('install', (event) => {
     event.waitUntil(
         caches.open(CACHE_NAME).then((cache) => {
-            return cache.addAll(STATIC_ASSETS)
+            return cache.addAll(STATIC_ASSETS);
         })
-    )
-    // Don't skip waiting automatically - let the app control this
-})
+    );
+});
 
-// Activate event - clean up old caches
 self.addEventListener('activate', (event) => {
     event.waitUntil(
         caches.keys().then((cacheNames) => {
             return Promise.all(
                 cacheNames
-                    .filter((cacheName) => cacheName !== CACHE_NAME)
+                    .filter((cacheName) => cacheName.startsWith('budget-tracker-') && cacheName !== CACHE_NAME)
                     .map((cacheName) => caches.delete(cacheName))
-            )
+            );
         })
-    )
-    self.clients.claim()
-})
+    );
+    self.clients.claim();
+});
 
-// Handle skip waiting message from the app
-self.addEventListener('message', (event) => {
-    if (event.data && event.data.type === 'SKIP_WAITING') {
-        self.skipWaiting()
-    }
-})
-
-// Fetch event - network first, fallback to cache
 self.addEventListener('fetch', (event) => {
-    // Skip non-GET requests
-    if (event.request.method !== 'GET') return
-
-    // Skip chrome-extension and other non-http requests
-    if (!event.request.url.startsWith('http')) return
-
-    event.respondWith(
-        fetch(event.request)
-            .then((response) => {
-                // Clone the response before caching
-                const responseClone = response.clone()
-
-                // Cache successful responses
-                if (response.status === 200) {
+    // Stale-while-revalidate for navigation requests
+    if (event.request.mode === 'navigate') {
+        event.respondWith(
+            caches.open(CACHE_NAME).then((cache) => {
+                return cache.match(event.request).then((cachedResponse) => {
+                    const fetchPromise = fetch(event.request).then((networkResponse) => {
+                        cache.put(event.request, networkResponse.clone());
+                        return networkResponse;
+                    });
+                    return cachedResponse || fetchPromise;
+                });
+            })
+        );
+    } else if (event.request.destination === 'script' || event.request.destination === 'style') {
+        // Stale-while-revalidate for scripts and styles
+        event.respondWith(
+            caches.open(CACHE_NAME).then((cache) => {
+                return cache.match(event.request).then((cachedResponse) => {
+                    const fetchPromise = fetch(event.request).then((networkResponse) => {
+                        cache.put(event.request, networkResponse.clone());
+                        return networkResponse;
+                    });
+                    return cachedResponse || fetchPromise;
+                });
+            })
+        );
+    } else if (event.request.url.includes('/api/')) {
+        // Network-first for API requests
+        event.respondWith(
+            fetch(event.request)
+                .then((response) => {
+                    const responseClone = response.clone();
                     caches.open(CACHE_NAME).then((cache) => {
-                        cache.put(event.request, responseClone)
-                    })
-                }
-
-                return response
-            })
-            .catch(() => {
-                // Network failed, try cache
-                return caches.match(event.request).then((cachedResponse) => {
-                    if (cachedResponse) {
-                        return cachedResponse
-                    }
-
-                    // Return offline fallback for navigation requests
-                    if (event.request.mode === 'navigate') {
-                        return caches.match('/')
-                    }
-
-                    return new Response('Offline', { status: 503 })
+                        cache.put(event.request, responseClone);
+                    });
+                    return response;
                 })
+                .catch(() => {
+                    return caches.match(event.request).then((cachedResponse) => {
+                        if (cachedResponse) {
+                            return cachedResponse;
+                        }
+                        return new Response(JSON.stringify({ error: 'Offline' }), {
+                            status: 503,
+                            headers: { 'Content-Type': 'application/json' },
+                        });
+                    });
+                })
+        );
+    } else {
+        // Cache-first for other requests
+        event.respondWith(
+            caches.match(event.request).then((response) => {
+                return response || fetch(event.request);
             })
-    )
-})
-
-// Handle background sync for offline data
-self.addEventListener('sync', (event) => {
-    if (event.tag === 'sync-data') {
-        event.waitUntil(syncData())
+        );
     }
-})
-
-async function syncData() {
-    // Placeholder for future offline sync functionality
-    console.log('Background sync triggered')
-}
-
-// Handle push notifications (placeholder for future use)
-self.addEventListener('push', (event) => {
-    if (event.data) {
-        const data = event.data.json()
-        const options = {
-            body: data.body,
-            icon: '/icons/icon-192.png',
-            badge: '/icons/android-launchericon-72-72.png',
-            vibrate: [100, 50, 100],
-            data: {
-                url: data.url || '/',
-            },
-        }
-        event.waitUntil(
-            self.registration.showNotification(data.title || 'Budget Tracker', options)
-        )
-    }
-})
-
-// Handle notification clicks
-self.addEventListener('notificationclick', (event) => {
-    event.notification.close()
-    event.waitUntil(
-        clients.openWindow(event.notification.data.url || '/')
-    )
-})
+});

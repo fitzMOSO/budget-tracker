@@ -8,7 +8,7 @@ export function ServiceWorkerRegistration() {
     const [showUpdateBanner, setShowUpdateBanner] = useState(false)
 
     useEffect(() => {
-        if ('serviceWorker' in navigator && process.env.NODE_ENV === 'production') {
+        if ('serviceWorker' in navigator) {
             navigator.serviceWorker
                 .register('/sw.js')
                 .then((registration) => {
