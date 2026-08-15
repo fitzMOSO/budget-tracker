@@ -693,18 +693,42 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         dispatch({ type: 'UPDATE_CATEGORY', payload: category })
     }, [])
 
+    // Only the collections the integrity check reads — not `accounts`,
+    // `categories`, `monthlyBudgets` or `settings` — so the delete callbacks
+    // keep their identity when unrelated parts of the state change.
+    const integrityRefs = useMemo(
+        () => ({
+            incomes: state.incomes,
+            expenses: state.expenses,
+            bills: state.bills,
+            transfers: state.transfers,
+            savingsContributions: state.savingsContributions,
+            creditCardStatements: state.creditCardStatements,
+            savingsGoals: state.savingsGoals,
+        }),
+        [
+            state.incomes,
+            state.expenses,
+            state.bills,
+            state.transfers,
+            state.savingsContributions,
+            state.creditCardStatements,
+            state.savingsGoals,
+        ],
+    )
+
     const canDeleteCategory = useCallback(
-        (id: string) => checkDelete(state, 'category', id),
-        [state],
+        (id: string) => checkDelete(integrityRefs, 'category', id),
+        [integrityRefs],
     )
 
     // The reducer would silently keep the category; returning the check makes
     // the refusal visible to the caller instead of a no-op with a success toast.
     const deleteCategory = useCallback((id: string): DeleteCheck => {
-        const check = checkDelete(state, 'category', id)
+        const check = checkDelete(integrityRefs, 'category', id)
         if (check.allowed) dispatch({ type: 'DELETE_CATEGORY', payload: id })
         return check
-    }, [state])
+    }, [integrityRefs])
 
     const getCategoryById = useCallback(
         (id: string) => state.categories.find((c) => c.id === id),
@@ -721,15 +745,15 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     }, [])
 
     const canDeleteAccount = useCallback(
-        (id: string) => checkDelete(state, 'account', id),
-        [state],
+        (id: string) => checkDelete(integrityRefs, 'account', id),
+        [integrityRefs],
     )
 
     const deleteAccount = useCallback((id: string): DeleteCheck => {
-        const check = checkDelete(state, 'account', id)
+        const check = checkDelete(integrityRefs, 'account', id)
         if (check.allowed) dispatch({ type: 'DELETE_ACCOUNT', payload: id })
         return check
-    }, [state])
+    }, [integrityRefs])
 
     const transferFunds = useCallback((transfer: Omit<Transfer, 'id'>) => {
         dispatch({ type: 'TRANSFER_FUNDS', payload: { ...transfer, id: uuidv4() } })

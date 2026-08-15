@@ -6,8 +6,19 @@ import type { AppState } from '../types'
  */
 export type DeleteCheck = { allowed: true } | { allowed: false; reason: string; count: number }
 
+/**
+ * Exactly the collections the two integrity rows read — notably not `accounts`,
+ * `categories` or `settings`. `AppState` satisfies it, so the reducer and the
+ * tests pass state straight in; it exists so a React caller can depend on these
+ * collections alone instead of on every state change.
+ */
+export type IntegrityRefs = Pick<
+    AppState,
+    'incomes' | 'expenses' | 'bills' | 'transfers' | 'savingsContributions' | 'creditCardStatements' | 'savingsGoals'
+>
+
 /** Counts records that would be orphaned by deleting this entity. */
-function referenceCount(state: AppState, entity: 'account' | 'category', id: string): number {
+function referenceCount(state: IntegrityRefs, entity: 'account' | 'category', id: string): number {
     if (entity === 'account') {
         // Bills are deliberately absent: a bill no longer moves money, so the
         // account that paid one lives on the linked expense, counted above.
@@ -27,7 +38,7 @@ function referenceCount(state: AppState, entity: 'account' | 'category', id: str
     )
 }
 
-export function checkDelete(state: AppState, entity: 'account' | 'category', id: string): DeleteCheck {
+export function checkDelete(state: IntegrityRefs, entity: 'account' | 'category', id: string): DeleteCheck {
     const count = referenceCount(state, entity, id)
     if (count === 0) return { allowed: true }
     return {

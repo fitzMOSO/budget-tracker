@@ -143,7 +143,10 @@ export default function AccountsPage() {
         const confirmed = await showDeleteConfirm(account.name)
         if (!confirmed) return
 
-        // Re-checked inside the context against the state at dispatch time.
+        // Checked once more inside the context, but against the state this
+        // render closed over, not the state the reducer will run against. The
+        // reducer's own guard is what actually makes the delete safe; this
+        // return value only gives a refusal something to say.
         const result = deleteAccount(account.id)
         if (!result.allowed) {
             showError(result.reason)

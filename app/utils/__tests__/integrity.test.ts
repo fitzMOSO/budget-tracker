@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { checkDelete, cascadeDelete } from '../integrity'
+import { computeBalances } from '../balances'
 import { budgetReducer, seedState } from '../../context/BudgetContext'
 
 describe('checkDelete', () => {
@@ -69,6 +70,56 @@ describe('cascade', () => {
         expect(budgetReducer(s, { type: 'DELETE_CREDIT_CARD', payload: 'cc1' })).toEqual(
             cascadeDelete(s, 'creditCard', 'cc1'),
         )
+    })
+})
+
+// A cascade does not only remove rows, it removes their balance effects. These
+// pin the money, so a later "fix" that keeps orphaned children (or re-adds
+// currentAmount bookkeeping) cannot move balances unnoticed.
+describe('cascades and derived balances', () => {
+    it('deleting a linked savings goal returns the money to the source and takes it off the linked account', () => {
+        const s = seedState()
+        s.accounts = [
+            { id: 'a1', name: 'Cash', type: 'cash', openingBalance: 100 },
+            { id: 'a2', name: 'Savings', type: 'bank', openingBalance: 0 },
+        ]
+        s.savingsGoals = [{ id: 'g1', name: 'Fund', targetAmount: 500, currentAmount: 0, linkedAccountId: 'a2' }]
+        s.savingsContributions = [{ id: 'sc1', savingsGoalId: 'g1', amount: 30, date: '2026-08-01', fromAccountId: 'a1' }]
+
+        expect(computeBalances(s)).toEqual({ a1: 70, a2: 30 })
+
+        const next = budgetReducer(s, { type: 'DELETE_SAVINGS_GOAL', payload: 'g1' })
+        expect(computeBalances(next)).toEqual({ a1: 100, a2: 0 })
+    })
+
+    it('deleting a credit card re-credits the account that paid its statement', () => {
+        const s = seedState()
+        s.accounts = [{ id: 'a1', name: 'Cash', type: 'cash', openingBalance: 100 }]
+        s.creditCards = [{ id: 'cc1', bank: 'BPI', cardType: 'Visa' }]
+        s.creditCardStatements = [{
+            id: 'st1', creditCardId: 'cc1', statementBalance: 40, amountPaid: 40,
+            dueDate: '2026-08-25', status: 'paid', paidFromAccountId: 'a1',
+        }]
+
+        expect(computeBalances(s)).toEqual({ a1: 60 })
+
+        const next = budgetReducer(s, { type: 'DELETE_CREDIT_CARD', payload: 'cc1' })
+        expect(computeBalances(next)).toEqual({ a1: 100 })
+    })
+
+    it('a statement with no paying account or nothing paid contributes no effect', () => {
+        const s = seedState()
+        s.accounts = [{ id: 'a1', name: 'Cash', type: 'cash', openingBalance: 100 }]
+        s.creditCardStatements = [
+            // No paying account: nothing to debit, and no orphan entry either.
+            { id: 'st1', creditCardId: 'cc1', statementBalance: 40, amountPaid: 40, dueDate: '2026-08-25', status: 'paid' },
+            // Nothing paid yet: a statement is not a movement until it is paid.
+            { id: 'st2', creditCardId: 'cc1', statementBalance: 40, amountPaid: 0, dueDate: '2026-08-25', status: 'pending', paidFromAccountId: 'a1' },
+        ]
+
+        const balances = computeBalances(s)
+        expect(balances).toEqual({ a1: 100 })
+        expect(Number.isNaN(balances.a1)).toBe(false)
     })
 })
 
