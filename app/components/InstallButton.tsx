@@ -1,86 +1,31 @@
 'use client'
 
-import { useState, useEffect } from 'react'
 import { Download } from 'lucide-react'
+import { useInstallPrompt } from '../hooks/useInstallPrompt'
 import { showSuccess, showInfo } from '../utils/swal'
 
-interface BeforeInstallPromptEvent extends Event {
-    prompt: () => Promise<void>
-    userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>
-}
-
 export function InstallButton() {
-    const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null)
-    const [isIOS, setIsIOS] = useState(false)
+    const { canInstall, isInstalled, isIOS, install } = useInstallPrompt()
 
-    // Initialize state based on install status
-    const [isInstalled, setIsInstalled] = useState(() => {
-        if (typeof window === 'undefined') return true
-        return window.matchMedia('(display-mode: standalone)').matches
-    })
-
-    useEffect(() => {
-        // Check if iOS
-        const isIOSDevice = /iPad|iPhone|iPod/.test(navigator.userAgent)
-        setIsIOS(isIOSDevice)
-
-        // Update install status for iOS
-        if (isIOSDevice) {
-            const isStandalone = window.matchMedia('(display-mode: standalone)').matches
-            if (!isStandalone) {
-                setIsInstalled(false)
-            }
-        }
-
-        // Listen for the beforeinstallprompt event
-        const handleBeforeInstallPrompt = (e: Event) => {
-            e.preventDefault()
-            setDeferredPrompt(e as BeforeInstallPromptEvent)
-            setIsInstalled(false)
-        }
-
-        window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt)
-
-        // Listen for app installed event
-        window.addEventListener('appinstalled', () => {
-            setIsInstalled(true)
-            setDeferredPrompt(null)
-            showSuccess('App installed successfully!')
-        })
-
-        return () => {
-            window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt)
-        }
-    }, [])
+    // The button is shown only when it can actually do something: either the
+    // browser has offered an install prompt, or we are on iOS where the user
+    // must be walked through the Share-sheet flow manually. Previously it was
+    // shown whenever the app was not installed, so on unsupported browsers it
+    // rendered a button whose only outcome was an apology.
+    if (isInstalled || (!canInstall && !isIOS)) return null
 
     const handleInstall = async () => {
         if (isIOS) {
-            showInfo('To install on iOS: Tap the Share button (⎋) in Safari, then tap "Add to Home Screen"')
+            showInfo('To install on iOS: tap the Share button in Safari, then "Add to Home Screen".')
             return
         }
 
-        if (!deferredPrompt) {
-            showInfo('To install: Open the browser menu and look for "Install App" or "Add to Home Screen"')
-            return
+        const outcome = await install()
+        if (outcome === 'accepted') {
+            showSuccess('App installed successfully!')
+        } else if (outcome === 'unavailable') {
+            showInfo('To install: open the browser menu and choose "Install App" or "Add to Home Screen".')
         }
-
-        try {
-            await deferredPrompt.prompt()
-            const { outcome } = await deferredPrompt.userChoice
-
-            if (outcome === 'accepted') {
-                setIsInstalled(true)
-                showSuccess('App installed successfully!')
-            }
-            setDeferredPrompt(null)
-        } catch (error) {
-            console.error('Error installing app:', error)
-        }
-    }
-
-    // Don't show button if app is already installed
-    if (isInstalled) {
-        return null
     }
 
     return (
