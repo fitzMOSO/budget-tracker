@@ -1,6 +1,6 @@
 'use client'
 
-import React, { createContext, useContext, useReducer, useEffect, useCallback, useRef } from 'react'
+import React, { createContext, useContext, useReducer, useEffect, useCallback, useMemo, useRef } from 'react'
 import { v4 as uuidv4 } from 'uuid'
 import type {
     AppState,
@@ -27,6 +27,7 @@ import {
     DEFAULT_ACCOUNTS as defaultAccounts,
 } from '../types'
 import { migrate, CURRENT_SCHEMA_VERSION, V1_BACKUP_KEY } from '../utils/migrations'
+import { computeBalances } from '../utils/balances'
 
 const STORAGE_KEY = 'budget-tracker-data'
 
@@ -59,7 +60,6 @@ type Action =
     | { type: 'ADD_ACCOUNT'; payload: Account }
     | { type: 'UPDATE_ACCOUNT'; payload: Account }
     | { type: 'DELETE_ACCOUNT'; payload: string }
-    | { type: 'UPDATE_ACCOUNT_BALANCE'; payload: { id: string; amount: number; operation: 'add' | 'subtract' } }
     | { type: 'TRANSFER_FUNDS'; payload: Transfer }
     // Income
     | { type: 'ADD_INCOME'; payload: Income }
@@ -142,20 +142,12 @@ export function budgetReducer(state: AppState, action: Action): AppState {
             return { ...state, accounts: [...state.accounts, action.payload] }
 
         case 'UPDATE_ACCOUNT':
-            {
-                const updatedAccounts = state.accounts.map((a) =>
+            // openingBalance is a plain user-editable field now; store the payload verbatim.
+            return {
+                ...state,
+                accounts: state.accounts.map((a) =>
                     a.id === action.payload.id ? action.payload : a
-                )
-                const syncedGoals = state.savingsGoals.map((g) => {
-                    if (!g.linkedAccountId) return g
-                    const linkedAccount = updatedAccounts.find((a) => a.id === g.linkedAccountId)
-                    return linkedAccount ? { ...g, currentAmount: linkedAccount.balance } : g
-                })
-                return {
-                    ...state,
-                    accounts: updatedAccounts,
-                    savingsGoals: syncedGoals,
-                }
+                ),
             }
 
         case 'DELETE_ACCOUNT':
@@ -164,198 +156,44 @@ export function budgetReducer(state: AppState, action: Action): AppState {
                 accounts: state.accounts.filter((a) => a.id !== action.payload),
             }
 
-        case 'UPDATE_ACCOUNT_BALANCE':
-            {
-                const updatedAccounts = state.accounts.map((a) =>
-                    a.id === action.payload.id
-                        ? {
-                            ...a,
-                            balance: action.payload.operation === 'add'
-                                ? a.balance + action.payload.amount
-                                : a.balance - action.payload.amount
-                        }
-                        : a
-                )
-                const syncedGoals = state.savingsGoals.map((g) => {
-                    if (!g.linkedAccountId) return g
-                    const linkedAccount = updatedAccounts.find((a) => a.id === g.linkedAccountId)
-                    return linkedAccount ? { ...g, currentAmount: linkedAccount.balance } : g
-                })
-                return {
-                    ...state,
-                    accounts: updatedAccounts,
-                    savingsGoals: syncedGoals,
-                }
-            }
-
         case 'TRANSFER_FUNDS':
             return { ...state, transfers: [...state.transfers, action.payload] }
 
         // Income
-        case 'ADD_INCOME': {
-            const income = action.payload
-            // If accountId is provided, add the amount to the account balance
-            if (income.accountId) {
-                return {
-                    ...state,
-                    incomes: [...state.incomes, income],
-                    accounts: state.accounts.map((a) =>
-                        a.id === income.accountId
-                            ? { ...a, balance: a.balance + income.amount }
-                            : a
-                    ),
-                }
-            }
-            return { ...state, incomes: [...state.incomes, income] }
-        }
+        case 'ADD_INCOME':
+            return { ...state, incomes: [...state.incomes, action.payload] }
 
-        case 'UPDATE_INCOME': {
-            const updatedIncome = action.payload
-            const oldIncome = state.incomes.find((i) => i.id === updatedIncome.id)
-
-            if (!oldIncome) {
-                return {
-                    ...state,
-                    incomes: state.incomes.map((i) =>
-                        i.id === updatedIncome.id ? updatedIncome : i
-                    ),
-                }
-            }
-
-            // Calculate account balance adjustments
-            let updatedAccounts = [...state.accounts]
-
-            // If old income had an account, deduct the old amount
-            if (oldIncome.accountId) {
-                updatedAccounts = updatedAccounts.map((a) =>
-                    a.id === oldIncome.accountId
-                        ? { ...a, balance: a.balance - oldIncome.amount }
-                        : a
-                )
-            }
-
-            // If new income has an account, add the new amount
-            if (updatedIncome.accountId) {
-                updatedAccounts = updatedAccounts.map((a) =>
-                    a.id === updatedIncome.accountId
-                        ? { ...a, balance: a.balance + updatedIncome.amount }
-                        : a
-                )
-            }
-
+        case 'UPDATE_INCOME':
             return {
                 ...state,
                 incomes: state.incomes.map((i) =>
-                    i.id === updatedIncome.id ? updatedIncome : i
+                    i.id === action.payload.id ? action.payload : i
                 ),
-                accounts: updatedAccounts,
-            }
-        }
-
-        case 'DELETE_INCOME': {
-            const incomeToDelete = state.incomes.find((i) => i.id === action.payload)
-
-            // If income had an account, deduct the amount back
-            if (incomeToDelete?.accountId) {
-                return {
-                    ...state,
-                    incomes: state.incomes.filter((i) => i.id !== action.payload),
-                    accounts: state.accounts.map((a) =>
-                        a.id === incomeToDelete.accountId
-                            ? { ...a, balance: a.balance - incomeToDelete.amount }
-                            : a
-                    ),
-                }
             }
 
+        case 'DELETE_INCOME':
             return {
                 ...state,
                 incomes: state.incomes.filter((i) => i.id !== action.payload),
             }
-        }
 
         // Expenses
-        case 'ADD_EXPENSE': {
-            const expense = action.payload
-            // If accountId is provided, deduct the amount from the account balance
-            if (expense.accountId) {
-                return {
-                    ...state,
-                    expenses: [...state.expenses, expense],
-                    accounts: state.accounts.map((a) =>
-                        a.id === expense.accountId
-                            ? { ...a, balance: a.balance - expense.amount }
-                            : a
-                    ),
-                }
-            }
-            return { ...state, expenses: [...state.expenses, expense] }
-        }
+        case 'ADD_EXPENSE':
+            return { ...state, expenses: [...state.expenses, action.payload] }
 
-        case 'UPDATE_EXPENSE': {
-            const updatedExpense = action.payload
-            const oldExpense = state.expenses.find((e) => e.id === updatedExpense.id)
-
-            if (!oldExpense) {
-                return {
-                    ...state,
-                    expenses: state.expenses.map((e) =>
-                        e.id === updatedExpense.id ? updatedExpense : e
-                    ),
-                }
-            }
-
-            // Calculate account balance adjustments
-            let updatedAccounts = [...state.accounts]
-
-            // If old expense had an account, refund the old amount
-            if (oldExpense.accountId) {
-                updatedAccounts = updatedAccounts.map((a) =>
-                    a.id === oldExpense.accountId
-                        ? { ...a, balance: a.balance + oldExpense.amount }
-                        : a
-                )
-            }
-
-            // If new expense has an account, deduct the new amount
-            if (updatedExpense.accountId) {
-                updatedAccounts = updatedAccounts.map((a) =>
-                    a.id === updatedExpense.accountId
-                        ? { ...a, balance: a.balance - updatedExpense.amount }
-                        : a
-                )
-            }
-
+        case 'UPDATE_EXPENSE':
             return {
                 ...state,
                 expenses: state.expenses.map((e) =>
-                    e.id === updatedExpense.id ? updatedExpense : e
+                    e.id === action.payload.id ? action.payload : e
                 ),
-                accounts: updatedAccounts,
-            }
-        }
-
-        case 'DELETE_EXPENSE': {
-            const expenseToDelete = state.expenses.find((e) => e.id === action.payload)
-
-            // If expense had an account, refund the amount
-            if (expenseToDelete?.accountId) {
-                return {
-                    ...state,
-                    expenses: state.expenses.filter((e) => e.id !== action.payload),
-                    accounts: state.accounts.map((a) =>
-                        a.id === expenseToDelete.accountId
-                            ? { ...a, balance: a.balance + expenseToDelete.amount }
-                            : a
-                    ),
-                }
             }
 
+        case 'DELETE_EXPENSE':
             return {
                 ...state,
                 expenses: state.expenses.filter((e) => e.id !== action.payload),
             }
-        }
 
         // Bills
         case 'ADD_BILL':
@@ -402,28 +240,14 @@ export function budgetReducer(state: AppState, action: Action): AppState {
             }
         }
 
-        case 'DELETE_BILL': {
-            const billToDelete = state.bills.find((b) => b.id === action.payload)
-            const refundAccountId = billToDelete?.isPaid ? billToDelete.paidFromAccountId : undefined
-
+        case 'DELETE_BILL':
+            // No refund: the money movement lives on the linked expense, not the bill.
             return {
                 ...state,
                 bills: state.bills.filter((b) => b.id !== action.payload),
-                // Refund bill amount if it was paid
-                accounts: refundAccountId && billToDelete
-                    ? state.accounts.map((acc) =>
-                        acc.id === refundAccountId
-                            ? { ...acc, balance: acc.balance + billToDelete.amount }
-                            : acc
-                    )
-                    : state.accounts,
             }
-        }
 
-        case 'PAY_BILL': {
-            const billToPay = state.bills.find((b) => b.id === action.payload.id)
-            const payAccountId = action.payload.accountId
-
+        case 'PAY_BILL':
             return {
                 ...state,
                 bills: state.bills.map((b) =>
@@ -431,21 +255,9 @@ export function budgetReducer(state: AppState, action: Action): AppState {
                         ? { ...b, isPaid: true, paidDate: action.payload.paidDate, paidFromAccountId: action.payload.accountId }
                         : b
                 ),
-                // Deduct bill amount from the paying account
-                accounts: payAccountId && billToPay
-                    ? state.accounts.map((acc) =>
-                        acc.id === payAccountId
-                            ? { ...acc, balance: acc.balance - billToPay.amount }
-                            : acc
-                    )
-                    : state.accounts,
             }
-        }
 
-        case 'UNPAY_BILL': {
-            const billToUnpay = state.bills.find((b) => b.id === action.payload)
-            const refundAccountId = billToUnpay?.paidFromAccountId
-
+        case 'UNPAY_BILL':
             return {
                 ...state,
                 bills: state.bills.map((b) =>
@@ -453,16 +265,7 @@ export function budgetReducer(state: AppState, action: Action): AppState {
                         ? { ...b, isPaid: false, paidDate: undefined, paidFromAccountId: undefined }
                         : b
                 ),
-                // Refund bill amount back to the account it was paid from
-                accounts: refundAccountId && billToUnpay
-                    ? state.accounts.map((acc) =>
-                        acc.id === refundAccountId
-                            ? { ...acc, balance: acc.balance + billToUnpay.amount }
-                            : acc
-                    )
-                    : state.accounts,
             }
-        }
 
         case 'GENERATE_RECURRING_BILLS': {
             const { month, year } = action.payload
@@ -609,19 +412,11 @@ export function budgetReducer(state: AppState, action: Action): AppState {
             return { ...state, savingsGoals: [...state.savingsGoals, action.payload] }
 
         case 'UPDATE_SAVINGS_GOAL':
-            {
-                const updatedGoals = state.savingsGoals.map((g) =>
+            return {
+                ...state,
+                savingsGoals: state.savingsGoals.map((g) =>
                     g.id === action.payload.id ? action.payload : g
-                )
-                const syncedGoals = updatedGoals.map((g) => {
-                    if (!g.linkedAccountId) return g
-                    const linkedAccount = state.accounts.find((a) => a.id === g.linkedAccountId)
-                    return linkedAccount ? { ...g, currentAmount: linkedAccount.balance } : g
-                })
-                return {
-                    ...state,
-                    savingsGoals: syncedGoals,
-                }
+                ),
             }
 
         case 'DELETE_SAVINGS_GOAL':
@@ -633,98 +428,24 @@ export function budgetReducer(state: AppState, action: Action): AppState {
         // Savings Contributions
         case 'ADD_SAVINGS_CONTRIBUTION': {
             const contribution = action.payload
-            const fromAccountId = contribution.fromAccountId
-            const goal = state.savingsGoals.find((g) => g.id === contribution.savingsGoalId)
-            const linkedAccountId = goal?.linkedAccountId
 
-            let updatedAccounts = state.accounts
-
-            if (fromAccountId && fromAccountId !== linkedAccountId) {
-                updatedAccounts = updatedAccounts.map((acc) =>
-                    acc.id === fromAccountId
-                        ? { ...acc, balance: acc.balance - contribution.amount }
-                        : acc
-                )
-            }
-
-            if (linkedAccountId && linkedAccountId !== fromAccountId) {
-                updatedAccounts = updatedAccounts.map((acc) =>
-                    acc.id === linkedAccountId
-                        ? { ...acc, balance: acc.balance + contribution.amount }
-                        : acc
-                )
-            }
-
+            // Account balances are derived from the contribution itself (see utils/balances).
             const updatedGoals = state.savingsGoals.map((g) =>
                 g.id === contribution.savingsGoalId && !g.linkedAccountId
                     ? { ...g, currentAmount: g.currentAmount + contribution.amount }
                     : g
             )
 
-            const syncedGoals = updatedGoals.map((g) => {
-                if (!g.linkedAccountId) return g
-                const linkedAccount = updatedAccounts.find((a) => a.id === g.linkedAccountId)
-                return linkedAccount ? { ...g, currentAmount: linkedAccount.balance } : g
-            })
-
             return {
                 ...state,
                 savingsContributions: [...state.savingsContributions, contribution],
-                // Deduct contribution amount from the source account
-                accounts: updatedAccounts,
-                savingsGoals: syncedGoals,
+                savingsGoals: updatedGoals,
             }
         }
 
         case 'UPDATE_SAVINGS_CONTRIBUTION': {
             const updatedContribution = action.payload
             const oldContribution = state.savingsContributions.find((c) => c.id === updatedContribution.id)
-            const oldAccountId = oldContribution?.fromAccountId
-            const newAccountId = updatedContribution.fromAccountId
-            const oldGoal = oldContribution
-                ? state.savingsGoals.find((g) => g.id === oldContribution.savingsGoalId)
-                : undefined
-            const newGoal = state.savingsGoals.find((g) => g.id === updatedContribution.savingsGoalId)
-            const oldLinkedAccountId = oldGoal?.linkedAccountId
-            const newLinkedAccountId = newGoal?.linkedAccountId
-
-            let updatedAccounts = state.accounts
-
-            // Refund the old account if it had one
-            if (oldAccountId && oldContribution && oldAccountId !== oldLinkedAccountId) {
-                updatedAccounts = updatedAccounts.map((acc) =>
-                    acc.id === oldAccountId
-                        ? { ...acc, balance: acc.balance + oldContribution.amount }
-                        : acc
-                )
-            }
-
-            // Remove from old linked account if applicable
-            if (oldLinkedAccountId && oldContribution && oldLinkedAccountId !== oldAccountId) {
-                updatedAccounts = updatedAccounts.map((acc) =>
-                    acc.id === oldLinkedAccountId
-                        ? { ...acc, balance: acc.balance - oldContribution.amount }
-                        : acc
-                )
-            }
-
-            // Deduct from the new account if specified
-            if (newAccountId && newAccountId !== newLinkedAccountId) {
-                updatedAccounts = updatedAccounts.map((acc) =>
-                    acc.id === newAccountId
-                        ? { ...acc, balance: acc.balance - updatedContribution.amount }
-                        : acc
-                )
-            }
-
-            // Add to new linked account if applicable
-            if (newLinkedAccountId && newLinkedAccountId !== newAccountId) {
-                updatedAccounts = updatedAccounts.map((acc) =>
-                    acc.id === newLinkedAccountId
-                        ? { ...acc, balance: acc.balance + updatedContribution.amount }
-                        : acc
-                )
-            }
 
             // Update savings goals amounts (only for unlinked goals)
             let updatedGoals = state.savingsGoals
@@ -749,47 +470,17 @@ export function budgetReducer(state: AppState, action: Action): AppState {
                 }
             }
 
-            const syncedGoals = updatedGoals.map((g) => {
-                if (!g.linkedAccountId) return g
-                const linkedAccount = updatedAccounts.find((a) => a.id === g.linkedAccountId)
-                return linkedAccount ? { ...g, currentAmount: linkedAccount.balance } : g
-            })
-
             return {
                 ...state,
                 savingsContributions: state.savingsContributions.map((c) =>
                     c.id === updatedContribution.id ? updatedContribution : c
                 ),
-                accounts: updatedAccounts,
-                savingsGoals: syncedGoals,
+                savingsGoals: updatedGoals,
             }
         }
 
         case 'DELETE_SAVINGS_CONTRIBUTION': {
             const contributionToDelete = state.savingsContributions.find((c) => c.id === action.payload)
-            const refundAccountId = contributionToDelete?.fromAccountId
-            const goal = contributionToDelete
-                ? state.savingsGoals.find((g) => g.id === contributionToDelete.savingsGoalId)
-                : undefined
-            const linkedAccountId = goal?.linkedAccountId
-
-            let updatedAccounts = state.accounts
-
-            if (refundAccountId && contributionToDelete && refundAccountId !== linkedAccountId) {
-                updatedAccounts = updatedAccounts.map((acc) =>
-                    acc.id === refundAccountId
-                        ? { ...acc, balance: acc.balance + contributionToDelete.amount }
-                        : acc
-                )
-            }
-
-            if (linkedAccountId && contributionToDelete && linkedAccountId !== refundAccountId) {
-                updatedAccounts = updatedAccounts.map((acc) =>
-                    acc.id === linkedAccountId
-                        ? { ...acc, balance: acc.balance - contributionToDelete.amount }
-                        : acc
-                )
-            }
 
             const updatedGoalsAfterDelete = contributionToDelete
                 ? state.savingsGoals.map((g) =>
@@ -799,18 +490,10 @@ export function budgetReducer(state: AppState, action: Action): AppState {
                 )
                 : state.savingsGoals
 
-            const syncedGoals = updatedGoalsAfterDelete.map((g) => {
-                if (!g.linkedAccountId) return g
-                const linkedAccount = updatedAccounts.find((a) => a.id === g.linkedAccountId)
-                return linkedAccount ? { ...g, currentAmount: linkedAccount.balance } : g
-            })
-
             return {
                 ...state,
                 savingsContributions: state.savingsContributions.filter((c) => c.id !== action.payload),
-                // Refund contribution amount back to the source account
-                accounts: updatedAccounts,
-                savingsGoals: syncedGoals,
+                savingsGoals: updatedGoalsAfterDelete,
             }
         }
 
@@ -853,6 +536,9 @@ export function budgetReducer(state: AppState, action: Action): AppState {
 type BudgetContextType = {
     state: AppState
     isLoading: boolean
+    /** Derived live balances by account id: openingBalance + every recorded effect. */
+    balances: Record<string, number>
+    balanceOf: (accountId: string) => number
     // Categories
     addCategory: (category: Omit<Category, 'id'>) => void
     updateCategory: (category: Category) => void
@@ -862,7 +548,6 @@ type BudgetContextType = {
     addAccount: (account: Omit<Account, 'id'>) => void
     updateAccount: (account: Account) => void
     deleteAccount: (id: string) => void
-    updateAccountBalance: (id: string, amount: number, operation: 'add' | 'subtract') => void
     transferFunds: (transfer: Omit<Transfer, 'id'>) => void
     // Income
     addIncome: (income: Omit<Income, 'id'>) => void
@@ -956,6 +641,10 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         }
     }, [state, isLoading, isInitialized])
 
+    // Derived balances — the single source of truth for "how much is in this account".
+    const balances = useMemo(() => computeBalances(state), [state])
+    const balanceOf = useCallback((accountId: string) => balances[accountId] ?? 0, [balances])
+
     // Category functions
     const addCategory = useCallback((category: Omit<Category, 'id'>) => {
         dispatch({ type: 'ADD_CATEGORY', payload: { ...category, id: uuidv4() } })
@@ -985,10 +674,6 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
     const deleteAccount = useCallback((id: string) => {
         dispatch({ type: 'DELETE_ACCOUNT', payload: id })
-    }, [])
-
-    const updateAccountBalance = useCallback((id: string, amount: number, operation: 'add' | 'subtract') => {
-        dispatch({ type: 'UPDATE_ACCOUNT_BALANCE', payload: { id, amount, operation } })
     }, [])
 
     const transferFunds = useCallback((transfer: Omit<Transfer, 'id'>) => {
@@ -1120,6 +805,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     const value: BudgetContextType = {
         state,
         isLoading,
+        balances,
+        balanceOf,
         addCategory,
         updateCategory,
         deleteCategory,
@@ -1127,7 +814,6 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         addAccount,
         updateAccount,
         deleteAccount,
-        updateAccountBalance,
         transferFunds,
         addIncome,
         updateIncome,
