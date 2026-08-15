@@ -180,6 +180,7 @@ const FACTORIES: Factory[] = [
         type: 'TRANSFER_FUNDS',
         payload: { id: `t${step}`, fromAccountId: realAccountRef(rng, state), toAccountId: realAccountRef(rng, state), amount: money(rng), date: day(rng) },
     }),
+    (rng, state, step) => ({ type: 'DELETE_TRANSFER', payload: existingId(rng, state.transfers, step) }),
 
     // Savings goals and contributions
     (rng, state, step) => ({
@@ -299,11 +300,10 @@ function baseState(): AppState {
  * The subset of factories that only ever ADD a record the drain test can later
  * remove, selected by the action they emit rather than by index so reordering
  * `FACTORIES` cannot silently change what the drain test exercises.
- * `TRANSFER_FUNDS` is absent on purpose: the reducer has no action that removes
- * a transfer, so a state containing one can never be drained to opening.
  */
 const DRAINABLE_ADD_TYPES = new Set<Action['type']>([
     'ADD_INCOME', 'ADD_EXPENSE', 'ADD_SAVINGS_CONTRIBUTION', 'ADD_STATEMENT', 'ADD_BILL', 'PAY_BILL',
+    'TRANSFER_FUNDS',
 ])
 const ADDITIVE_FACTORIES: Factory[] = FACTORIES.filter(
     (factory) => DRAINABLE_ADD_TYPES.has(factory(makeRng(1), baseState(), 0).type),
@@ -338,10 +338,9 @@ describe('balance invariant holds across arbitrary operation sequences', () => {
             assertOpeningBalancesStable(before, state, op, `worked example step ${i}`)
         })
 
-        // Every removable record is gone, so the only thing left of the whole
-        // sequence is `t1` — the reducer has no action that deletes a transfer,
-        // so its 1000 from a1 to a2 is permanent. The untouched accounts prove
-        // the other five operations reversed themselves exactly.
+        // The sequence deliberately leaves `t1` in place, so a1/a2 still carry
+        // its 1000. The other five operations reversed themselves exactly, and
+        // the untouched trap accounts prove nothing leaked sideways.
         // Built from entries, not a literal: `{ __proto__: -250 }` is the
         // prototype-setter syntax and would silently produce no such key.
         expect(computeBalances(state)).toEqual(Object.fromEntries([
@@ -414,6 +413,7 @@ describe('balance invariant holds across arbitrary operation sequences', () => {
             for (const expense of [...state.expenses]) state = budgetReducer(state, { type: 'DELETE_EXPENSE', payload: expense.id })
             for (const contribution of [...state.savingsContributions]) state = budgetReducer(state, { type: 'DELETE_SAVINGS_CONTRIBUTION', payload: contribution.id })
             for (const statement of [...state.creditCardStatements]) state = budgetReducer(state, { type: 'DELETE_STATEMENT', payload: statement.id })
+            for (const transfer of [...state.transfers]) state = budgetReducer(state, { type: 'DELETE_TRANSFER', payload: transfer.id })
 
             assertInvariant(state, `drain seed ${seed}: drained`)
             expect(allEffects(state), `drain seed ${seed}: records still moving money`).toEqual([])

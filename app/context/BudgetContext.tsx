@@ -65,6 +65,7 @@ export type Action =
     | { type: 'UPDATE_ACCOUNT'; payload: Account }
     | { type: 'DELETE_ACCOUNT'; payload: string }
     | { type: 'TRANSFER_FUNDS'; payload: Transfer }
+    | { type: 'DELETE_TRANSFER'; payload: string }
     // Income
     | { type: 'ADD_INCOME'; payload: Income }
     | { type: 'UPDATE_INCOME'; payload: Income }
@@ -164,6 +165,20 @@ export function budgetReducer(state: AppState, action: Action): AppState {
 
         case 'TRANSFER_FUNDS':
             return { ...state, transfers: [...state.transfers, action.payload] }
+
+        case 'DELETE_TRANSFER':
+            // Removing the record IS the whole reversal — both legs of the
+            // transfer are effects of this record, so the balances re-derive.
+            // Any arithmetic here would reverse it a second time.
+            //
+            // There is deliberately no UPDATE_TRANSFER: nothing in the state
+            // references a transfer id, so delete-and-re-add is
+            // indistinguishable from an in-place edit, and a second mutation
+            // path is one more place to get the effect signs wrong.
+            return {
+                ...state,
+                transfers: state.transfers.filter((t) => t.id !== action.payload),
+            }
 
         // Income
         case 'ADD_INCOME':
@@ -534,6 +549,12 @@ type BudgetContextType = {
     canDeleteAccount: (id: string) => DeleteCheck
     canDeleteCategory: (id: string) => DeleteCheck
     transferFunds: (transfer: Omit<Transfer, 'id'>) => void
+    /**
+     * The only way to correct a transfer. Without it a mistyped transfer is
+     * permanent AND both of its accounts are permanently undeletable, because
+     * `checkDelete` counts a transfer as a reference to each.
+     */
+    deleteTransfer: (id: string) => void
     // Income
     addIncome: (income: Omit<Income, 'id'>) => void
     updateIncome: (income: Income) => void
@@ -720,6 +741,10 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         dispatch({ type: 'TRANSFER_FUNDS', payload: { ...transfer, id: uuidv4() } })
     }, [])
 
+    const deleteTransfer = useCallback((id: string) => {
+        dispatch({ type: 'DELETE_TRANSFER', payload: id })
+    }, [])
+
     // Income functions
     const addIncome = useCallback((income: Omit<Income, 'id'>) => {
         dispatch({ type: 'ADD_INCOME', payload: { ...income, id: uuidv4() } })
@@ -872,6 +897,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         deleteAccount,
         canDeleteAccount,
         transferFunds,
+        deleteTransfer,
         addIncome,
         updateIncome,
         deleteIncome,

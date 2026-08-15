@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState } from 'react'
-import { Plus, Wallet, Building2, Smartphone, MoreHorizontal, Pencil, Trash2, ArrowUpCircle, ArrowDownCircle } from 'lucide-react'
+import { Plus, Wallet, Building2, Smartphone, MoreHorizontal, Pencil, Trash2, ArrowUpCircle, ArrowDownCircle, ArrowRight } from 'lucide-react'
 import { AppLayout } from '../components/AppLayout'
 import {
     Card,
@@ -14,9 +14,9 @@ import {
     Select,
 } from '../components/ui'
 import { useBudget } from '../context/BudgetContext'
-import { formatCurrency, getMonthYear } from '../utils'
+import { formatCurrency, formatDate, getMonthYear } from '../utils'
 import { showSuccess, showDeleteConfirm, showError } from '../utils/swal'
-import type { Account } from '../types'
+import type { Account, Transfer } from '../types'
 
 const ACCOUNT_TYPES = [
     { value: 'cash', label: 'Cash' },
@@ -50,7 +50,7 @@ const getAccountIcon = (type: Account['type']) => {
 }
 
 export default function AccountsPage() {
-    const { state, balances, balanceOf, addAccount, updateAccount, deleteAccount, canDeleteAccount, isLoading } = useBudget()
+    const { state, balances, balanceOf, addAccount, updateAccount, deleteAccount, canDeleteAccount, deleteTransfer, isLoading } = useBudget()
     const { month: currentMonth, year: currentYear } = getMonthYear()
     const [selectedMonth, setSelectedMonth] = useState(currentMonth)
     const [selectedYear, setSelectedYear] = useState(currentYear)
@@ -153,6 +153,22 @@ export default function AccountsPage() {
             return
         }
         showSuccess('Account deleted successfully!')
+    }
+
+    const accountName = (id: string) => state.accounts.find((a) => a.id === id)?.name ?? 'Unknown account'
+
+    // Newest first, and a copy — `sort` mutates, and this array is state.
+    const recentTransfers = [...state.transfers].sort((a, b) => b.date.localeCompare(a.date))
+
+    const handleDeleteTransfer = async (transfer: Transfer) => {
+        const confirmed = await showDeleteConfirm(
+            `this transfer of ${formatCurrency(transfer.amount, state.settings)}`,
+            'Both accounts return to what they were before it. To correct a transfer, delete it and record the right one.',
+        )
+        if (!confirmed) return
+
+        deleteTransfer(transfer.id)
+        showSuccess('Transfer deleted!')
     }
 
     if (isLoading) {
@@ -289,6 +305,54 @@ export default function AccountsPage() {
                                                 Delete
                                             </Button>
                                         </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
+
+                {/* Transfers — the only place they are listed, and the only way
+                    to undo one. A transfer also blocks BOTH of its accounts from
+                    being deleted, so without this the trap is inescapable. */}
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                            <ArrowRight className="w-5 h-5" />
+                            Transfers
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        {recentTransfers.length === 0 ? (
+                            <p className="text-gray-500 text-center py-8">
+                                No transfers yet. Move money between accounts from Quick Add.
+                            </p>
+                        ) : (
+                            <div className="divide-y divide-gray-100">
+                                {recentTransfers.map((transfer) => (
+                                    <div key={transfer.id} className="flex items-center gap-4 py-3">
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex items-center gap-2 text-sm font-medium text-gray-900">
+                                                <span className="truncate">{accountName(transfer.fromAccountId)}</span>
+                                                <ArrowRight className="w-3 h-3 text-gray-400 shrink-0" />
+                                                <span className="truncate">{accountName(transfer.toAccountId)}</span>
+                                            </div>
+                                            <p className="text-xs text-gray-500">
+                                                {formatDate(transfer.date)}
+                                                {transfer.notes ? ` · ${transfer.notes}` : ''}
+                                            </p>
+                                        </div>
+                                        <span className="font-semibold text-gray-900 shrink-0">
+                                            {formatCurrency(transfer.amount, state.settings)}
+                                        </span>
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            className="text-red-600 hover:text-red-700 hover:bg-red-50 shrink-0"
+                                            onClick={() => handleDeleteTransfer(transfer)}
+                                        >
+                                            <Trash2 className="w-3 h-3" />
+                                        </Button>
                                     </div>
                                 ))}
                             </div>
