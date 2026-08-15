@@ -1,18 +1,13 @@
 'use client'
 
-import React, { useState, useRef, useEffect } from 'react'
-import { Settings as SettingsIcon, Save, RefreshCw, Download, Upload, FileSpreadsheet, Smartphone } from 'lucide-react'
+import React, { useState, useRef } from 'react'
+import { Settings as SettingsIcon, Save, RefreshCw, Download, Upload, FileSpreadsheet } from 'lucide-react'
 import { AppLayout } from '../components/AppLayout'
 import { Card, CardHeader, CardTitle, CardContent, Button, Input, Select } from '../components/ui'
 import { useBudget } from '../context/BudgetContext'
 import { getMonthYear } from '../utils'
 import { exportToExcel } from '../utils/excel'
-import { showSuccess, showError, showDeleteConfirm, showConfirm, showInfo } from '../utils/swal'
-
-interface BeforeInstallPromptEvent extends Event {
-    prompt: () => Promise<void>
-    userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>
-}
+import { showSuccess, showError, showDeleteConfirm, showConfirm } from '../utils/swal'
 
 const CURRENCIES = [
     { value: 'PHP', label: 'Philippine Peso (₱)', symbol: '₱' },
@@ -33,67 +28,6 @@ export default function SettingsPage() {
     const [selectedMonth, setSelectedMonth] = useState(currentMonth)
     const [selectedYear, setSelectedYear] = useState(currentYear)
     const fileInputRef = useRef<HTMLInputElement>(null)
-
-    // Install App state
-    const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null)
-    const [isAppInstalled, setIsAppInstalled] = useState(false)
-    const [isIOS, setIsIOS] = useState(false)
-
-    useEffect(() => {
-        // Check if already installed
-        const isStandalone = window.matchMedia('(display-mode: standalone)').matches
-        setIsAppInstalled(isStandalone)
-
-        // Check if iOS
-        const isIOSDevice = /iPad|iPhone|iPod/.test(navigator.userAgent)
-        setIsIOS(isIOSDevice)
-
-        // Listen for the beforeinstallprompt event
-        const handleBeforeInstallPrompt = (e: Event) => {
-            e.preventDefault()
-            setDeferredPrompt(e as BeforeInstallPromptEvent)
-        }
-
-        window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt)
-
-        // Listen for app installed event
-        window.addEventListener('appinstalled', () => {
-            setIsAppInstalled(true)
-            setDeferredPrompt(null)
-        })
-
-        return () => {
-            window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt)
-        }
-    }, [])
-
-    const handleInstallApp = async () => {
-        if (isIOS) {
-            showInfo('To install on iOS: Tap the Share button in Safari, then tap "Add to Home Screen"')
-            return
-        }
-
-        if (!deferredPrompt) {
-            showInfo('To install: Open the browser menu and look for "Install App" or "Add to Home Screen"')
-            return
-        }
-
-        deferredPrompt.prompt()
-        const { outcome } = await deferredPrompt.userChoice
-
-        if (outcome === 'accepted') {
-            showSuccess('App installed successfully!')
-        }
-        setDeferredPrompt(null)
-    }
-
-    const handleResetInstallPrompt = () => {
-        localStorage.removeItem('pwa-prompt-dismissed')
-        showSuccess('Install prompt reset! Reloading page...')
-        setTimeout(() => {
-            window.location.reload()
-        }, 1500)
-    }
 
     const [formData, setFormData] = useState({
         currency: state.settings.currency,
@@ -417,64 +351,6 @@ export default function SettingsPage() {
                                 Built with Next.js, React, and Tailwind CSS. All data is stored locally in your
                                 browser.
                             </p>
-                        </div>
-                    </CardContent>
-                </Card>
-
-                {/* Install App */}
-                <Card>
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                            <Smartphone className="w-5 h-5" />
-                            Install App
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                        {isAppInstalled ? (
-                            <div className="flex items-center gap-2 text-green-600">
-                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                </svg>
-                                <span className="font-medium">App is installed!</span>
-                            </div>
-                        ) : (
-                            <>
-                                <p className="text-sm text-gray-600">
-                                    Install Budget Tracker on your device for quick access, offline use, and widget shortcuts.
-                                </p>
-                                <div className="flex flex-col sm:flex-row gap-3">
-                                    <Button onClick={handleInstallApp}>
-                                        <Download className="w-4 h-4 mr-2" />
-                                        {isIOS ? 'How to Install' : (deferredPrompt ? 'Install App' : 'Install App')}
-                                    </Button>
-                                    <Button variant="outline" onClick={handleResetInstallPrompt}>
-                                        <RefreshCw className="w-4 h-4 mr-2" />
-                                        Reset Install Prompt
-                                    </Button>
-                                </div>
-                            </>
-                        )}
-
-                        <div className="mt-4 p-4 bg-blue-50 rounded-lg">
-                            <h4 className="font-medium text-blue-800 mb-2">📱 Android Quick Actions</h4>
-                            <p className="text-sm text-blue-700 mb-2">
-                                After installing the app, long-press the app icon to see quick actions:
-                            </p>
-                            <ul className="text-sm text-blue-700 list-disc list-inside space-y-1 mb-3">
-                                <li><strong>Add Expense</strong> - Quickly add a new expense</li>
-                                <li><strong>Add Income</strong> - Quickly add a new income</li>
-                                <li><strong>Transfer Funds</strong> - Transfer between accounts</li>
-                                <li><strong>View Bills</strong> - Jump to your bills page</li>
-                            </ul>
-
-                            <p className="text-xs text-blue-700 font-medium mb-2">📲 Samsung One UI Instructions:</p>
-                            <ol className="text-xs text-blue-700 list-decimal list-inside space-y-1">
-                                <li>Long-press an empty area on your home screen</li>
-                                <li>Tap <strong>"Widgets"</strong></li>
-                                <li>Scroll down and find <strong>"Budget Tracker"</strong></li>
-                                <li>Long-press the widget/app and select <strong>"Add to Home Screen"</strong></li>
-                                <li>Or, long-press the app icon to see all available shortcuts</li>
-                            </ol>
                         </div>
                     </CardContent>
                 </Card>
