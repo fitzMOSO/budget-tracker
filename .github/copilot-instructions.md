@@ -6,47 +6,41 @@ Purpose
 
 High-level architecture
 -----------------------
-- Frontend: Next.js (app router, `app/` directory) written in TypeScript and React 19. Key UI code lives under `app/components/`, `app/dashboard/`, and `app/ui/`.
-- Data access: client hooks in `app/hooks/useApi.ts` call REST-style endpoints under `/api/*` (examples: `/api/categories`, `/api/incomes`, `/api/expenses`, `/api/bills`, `/api/credit-cards`).
-- Server/DB layer: `app/lib/db.ts` uses the `mssql` package to connect to a SQL Server instance. SQL schema: `database/schema.sql`. Historical API route implementations are in `app/_api_disabled/` (look there for examples to re-enable or adapt).
-- Mobile / PWA: Capacitor is configured (`capacitor.config.ts`, `android/`, `ios/`). The app is a PWA (see `public/manifest.json` and `public/sw.js`) and can be packaged with Capacitor.
+- **Local-first, no backend.** There is no server, no database, and no API. All state lives in the browser's `localStorage` under the single key `budget-tracker-data`. Any change that adds a fetch to a server contradicts the architecture — raise it explicitly rather than implementing it.
+- Frontend: Next.js 16 (App Router, `app/` directory), React 19, TypeScript strict, Tailwind CSS v4. One folder per route under `app/`; shared UI in `app/components/`.
+- State: `app/context/BudgetContext.tsx` — a `useReducer` store that owns every mutation and persists to `localStorage`. Add features by adding actions there, not by introducing another state library.
+- Static export: `next.config.ts` sets `output: 'export'`, so there are no runtime server components, no route handlers, no middleware, and `headers()` is unavailable. Cache headers go in `public/_headers`.
+- PWA: `app/sw.js` is the service worker **source** (not a route). `workbox.config.js` drives `workbox-cli injectManifest`, which stamps a content-hashed precache manifest into it and writes `out/sw.js`.
 
 Developer workflows & important commands
 --------------------------------------
-- Local dev (web): `npm run dev` — runs Next.js dev server (http://localhost:3000).
-- Build web output for Capacitor: `npm run build:web` — runs `next build` and `node scripts/generate-out.js` to produce the `out` web-dir used by Capacitor.
-- Capacitor lifecycle (after producing web output):
-  - `npm run cap:init` (only once) to initialize Capacitor with `--web-dir=out`.
-  - `npm run cap:sync` to copy web assets to native projects.
-  - `npm run cap:open:android` / `npm run cap:open:ios` to open native IDEs.
-- Linting: `npm run lint` uses `eslint` with project config `eslint.config.mjs`.
+- `npm run dev` — Next.js dev server (http://localhost:3000). The service worker is **not** active here; use a production build to test offline behaviour.
+- `npm run build:web` — `next build` followed by `workbox injectManifest`. This is the deploy command; plain `npm run build` skips the service worker and produces an `out/` that cannot work offline.
+- `npx serve out` — serve the built output to test install/offline/update flows.
+- `npm test` / `npm run test:watch` — Vitest + Testing Library (jsdom).
+- `npm run lint` — ESLint via `eslint.config.mjs`.
 
 Project-specific conventions & patterns
 -------------------------------------
-- App router usage: pages/components are inside `app/` using the Next 13+ app directory structure. Edit `app/page.tsx` and nested folders for views.
-- Client data access: prefer the hooks in `app/hooks/useApi.ts` — they encapsulate fetch patterns and error handling. Use the same `/api/*` path shape when adding endpoints.
-- Database connection: `app/lib/db.ts` centralizes `mssql` connection pooling. Do not hardcode secrets when committing; replace with environment configuration when creating production-ready changes.
-- Disabled API routes: production API behaviors may be disabled; check `app/_api_disabled/` for prior route code and mirror patterns when re-enabling.
-- State: shared UI state is provided through `context/BudgetContext.tsx` — follow its shape when adding features that need global state.
-
-Integration points & external dependencies
-----------------------------------------
-- SQL Server via `mssql` (see `app/lib/db.ts`). Local credentials live in that file for development; replace with environment variables in PRs.
-- Capacitor (`@capacitor/*`) for mobile packaging; native projects are under `android/` and `ios/`.
-- Netlify config exists (`netlify.toml`) and serverless function example in `netlify/functions/ping.js`.
+- **Money is a plain `number`.** Known limitation, documented in the README. Don't silently change the representation; it would need a migration for existing `localStorage` data.
+- **Savings figures come from `savingsContributions`, not expenses.** `calculateBudgetSummary` in `app/utils/index.ts` derives `savingsActual` only from contributions, so an expense tagged `expenseType: 'savings'` counts toward no bucket at all. This is existing behaviour, pinned by tests.
+- **`IMPORT_DATA` appends, it does not replace.** To replace state, dispatch a reset first — see `handleLoadDemoData` in `app/settings/page.tsx`.
+- **The service worker must not import anything.** `injectManifest` substitutes the `self.__WB_MANIFEST` token without bundling, so `import`/`require` in `app/sw.js` will break at runtime.
+- **Precache keys are extensionless URLs.** Static hosts 301 `/expenses.html` to `/expenses`, and caching a redirected response makes the browser refuse to serve it for a navigation. `workbox.config.js` rewrites the flat export filenames accordingly.
+- Browser state (connectivity, display-mode) is read via `useSyncExternalStore`, not copied into React state from an effect.
+- Dialogs use the helpers in `app/utils/swal.ts` rather than SweetAlert2 directly.
 
 Files to inspect first (quick tour)
 ---------------------------------
-- `package.json` (scripts & deps) — build and cap scripts.
-- `app/hooks/useApi.ts` — canonical client fetch patterns and endpoint names.
-- `app/lib/db.ts` and `database/schema.sql` — DB connection and schema.
-- `app/_api_disabled/` — prior API route implementations to reuse.
-- `scripts/generate-out.js` — web -> `out` generation used by `build:web`.
+- `README.md` — architecture rationale and known limitations.
+- `app/context/BudgetContext.tsx` — the reducer; the centre of the app.
+- `app/types/index.ts` — every domain type and the defaults.
+- `app/utils/index.ts` — budget maths, including `calculateBudgetSummary`.
+- `app/sw.js` + `workbox.config.js` — offline behaviour.
+- `docs/superpowers/specs/` and `docs/superpowers/plans/` — the design and implementation record for the local-first repositioning, including recorded deviations and why they were made.
 
 Notes for contributors / AI agents
 ---------------------------------
-- Prefer small, focused changes. Preserve Next.js app-router conventions.
-- Avoid committing secrets; if you need credentials for local testing, use environment variables and document them in a secure channel.
-- When updating mobile flow, validate by running `npm run build:web` then `npm run cap:sync` before opening native projects.
-
-If anything above is unclear or you want more detail (CI, deploy to Netlify/Vercel, or how the mobile packaging is validated), tell me which area to expand.
+- Prefer small, focused changes. Preserve App Router conventions.
+- There are no secrets in this repo and no environment variables to configure. If a change appears to need either, that is a signal it conflicts with the local-first design.
+- Verify PWA changes with `npm run build:web && npx serve out`, then load once and navigate with DevTools set to Offline.

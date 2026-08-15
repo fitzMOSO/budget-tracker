@@ -1,8 +1,11 @@
 [build]
   command = "npm ci && npm run build:web"
   publish = "out"
-  functions = "netlify/functions"
 
-[context.production.environment]
-# Example env keys you may want to set in Netlify UI instead of committing
-# NEXT_PUBLIC_API_BASE_URL = "https://api.example.com"
+# No functions directory and no environment variables: this is a fully static,
+# local-first app. All data lives in the browser and there is no server-side
+# component to deploy or configure.
+#
+# Cache headers live in public/_headers, because `headers()` in next.config is
+# unsupported under output: 'export'. /sw.js in particular must never be cached,
+# or clients will be pinned to a stale service worker.
