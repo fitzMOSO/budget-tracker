@@ -1,109 +1,78 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import Swal from 'sweetalert2'
+import { useEffect, useRef, useState } from 'react'
+import { UpdatePrompt } from './UpdatePrompt'
+
+const UPDATE_CHECK_INTERVAL_MS = 60 * 60 * 1000
 
 export function ServiceWorkerRegistration() {
     const [waitingWorker, setWaitingWorker] = useState<ServiceWorker | null>(null)
-    const [showUpdateBanner, setShowUpdateBanner] = useState(false)
+    const [dismissed, setDismissed] = useState(false)
+    // A ref, not a local `let`: the previous version reset its guard on every
+    // effect run, so a controllerchange could trigger repeated reloads.
+    const reloadingRef = useRef(false)
 
     useEffect(() => {
-        if ('serviceWorker' in navigator) {
-            navigator.serviceWorker
-                .register('/sw.js')
-                .then((registration) => {
-                    console.log('Service Worker registered with scope:', registration.scope)
+        if (!('serviceWorker' in navigator)) return
 
-                    // Check if there's already a waiting worker
-                    if (registration.waiting) {
-                        setWaitingWorker(registration.waiting)
-                        setShowUpdateBanner(true)
-                    }
+        let registration: ServiceWorkerRegistration | undefined
+        let intervalId: ReturnType<typeof setInterval> | undefined
 
-                    // Listen for new service worker updates
-                    registration.addEventListener('updatefound', () => {
-                        const newWorker = registration.installing
-                        if (newWorker) {
-                            newWorker.addEventListener('statechange', () => {
-                                if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                                    // New update available
-                                    setWaitingWorker(newWorker)
-                                    setShowUpdateBanner(true)
-                                    showUpdateNotification(newWorker)
-                                }
-                            })
-                        }
-                    })
+        const onVisibilityChange = () => {
+            if (document.visibilityState === 'visible') registration?.update()
+        }
 
-                    // Check for updates periodically
-                    setInterval(() => {
-                        registration.update()
-                    }, 60 * 60 * 1000) // Check every hour
+        const onControllerChange = () => {
+            if (reloadingRef.current) return
+            reloadingRef.current = true
+            window.location.reload()
+        }
 
-                    // Also check on visibility change (when user returns to app)
-                    document.addEventListener('visibilitychange', () => {
-                        if (document.visibilityState === 'visible') {
-                            registration.update()
-                        }
-                    })
-                })
-                .catch((error) => {
-                    console.error('Service Worker registration failed:', error)
-                })
+        navigator.serviceWorker.addEventListener('controllerchange', onControllerChange)
 
-            // Handle controller change (after skip waiting)
-            let refreshing = false
-            navigator.serviceWorker.addEventListener('controllerchange', () => {
-                if (!refreshing) {
-                    refreshing = true
-                    window.location.reload()
+        navigator.serviceWorker
+            .register('/sw.js')
+            .then((reg) => {
+                registration = reg
+
+                // The controller check matters: without it, the very first
+                // install (where there is no previous version to replace)
+                // would announce an "update" to a first-time visitor.
+                if (reg.waiting && navigator.serviceWorker.controller) {
+                    setWaitingWorker(reg.waiting)
                 }
+
+                reg.addEventListener('updatefound', () => {
+                    const installing = reg.installing
+                    if (!installing) return
+                    installing.addEventListener('statechange', () => {
+                        if (installing.state === 'installed' && navigator.serviceWorker.controller) {
+                            setWaitingWorker(installing)
+                            setDismissed(false)
+                        }
+                    })
+                })
+
+                intervalId = setInterval(() => reg.update(), UPDATE_CHECK_INTERVAL_MS)
+                document.addEventListener('visibilitychange', onVisibilityChange)
             })
+            .catch((error) => {
+                console.error('Service worker registration failed:', error)
+            })
+
+        return () => {
+            navigator.serviceWorker.removeEventListener('controllerchange', onControllerChange)
+            document.removeEventListener('visibilitychange', onVisibilityChange)
+            if (intervalId) clearInterval(intervalId)
         }
     }, [])
 
-    const showUpdateNotification = (worker: ServiceWorker) => {
-        Swal.fire({
-            title: 'Update Available!',
-            text: 'A new version of Budget Tracker is available. Would you like to update now?',
-            icon: 'info',
-            showCancelButton: true,
-            confirmButtonText: 'Update Now',
-            cancelButtonText: 'Later',
-            confirmButtonColor: '#3085d6',
-            allowOutsideClick: false,
-        }).then((result) => {
-            if (result.isConfirmed) {
-                worker.postMessage({ type: 'SKIP_WAITING' })
-            }
-        })
-    }
+    if (!waitingWorker || dismissed) return null
 
-    const handleUpdate = () => {
-        if (waitingWorker) {
-            waitingWorker.postMessage({ type: 'SKIP_WAITING' })
-        }
-    }
-
-    // Show a persistent update banner as fallback
-    if (showUpdateBanner && waitingWorker) {
-        return (
-            <div className="fixed bottom-0 left-0 right-0 bg-blue-600 text-white px-4 py-3 flex items-center justify-between z-9999 shadow-lg">
-                <div className="flex items-center gap-2">
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                    </svg>
-                    <span className="font-medium">A new version is available!</span>
-                </div>
-                <button
-                    onClick={handleUpdate}
-                    className="bg-white text-blue-600 px-4 py-1.5 rounded-lg font-semibold hover:bg-blue-50 transition-colors"
-                >
-                    Update Now
-                </button>
-            </div>
-        )
-    }
-
-    return null
+    return (
+        <UpdatePrompt
+            onUpdate={() => waitingWorker.postMessage({ type: 'SKIP_WAITING' })}
+            onDismiss={() => setDismissed(true)}
+        />
+    )
 }
