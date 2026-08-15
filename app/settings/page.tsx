@@ -1,13 +1,14 @@
 'use client'
 
 import React, { useState, useRef } from 'react'
-import { Settings as SettingsIcon, Save, RefreshCw, Download, Upload, FileSpreadsheet } from 'lucide-react'
+import { Settings as SettingsIcon, Save, RefreshCw, Download, Upload, FileSpreadsheet, Sparkles } from 'lucide-react'
 import { AppLayout } from '../components/AppLayout'
 import { Card, CardHeader, CardTitle, CardContent, Button, Input, Select } from '../components/ui'
 import { useBudget } from '../context/BudgetContext'
 import { getMonthYear } from '../utils'
 import { exportToExcel } from '../utils/excel'
 import { showSuccess, showError, showDeleteConfirm, showConfirm } from '../utils/swal'
+import { buildDemoData } from '../utils/demo-data'
 
 const CURRENCIES = [
     { value: 'PHP', label: 'Philippine Peso (₱)', symbol: '₱' },
@@ -83,6 +84,22 @@ export default function SettingsPage() {
             resetData()
             showSuccess('All data has been reset.')
         }
+    }
+
+    const handleLoadDemoData = async () => {
+        const confirmed = await showConfirm(
+            'Load demo data?',
+            'This replaces all data on this device with a realistic sample budget.',
+            'Load demo data'
+        )
+        if (!confirmed) return
+
+        // Reset first: IMPORT_DATA appends to the existing collections rather
+        // than replacing them, so importing alone would duplicate the demo on a
+        // second run and interleave it with any real data already present.
+        resetData()
+        importData(buildDemoData())
+        showSuccess('Demo data loaded.')
     }
 
     // Export to Excel
@@ -336,6 +353,24 @@ export default function SettingsPage() {
                     </CardContent>
                 </Card>
 
+                {/* Demo Data */}
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Demo Data</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <Button variant="outline" onClick={handleLoadDemoData}>
+                            <Sparkles className="w-4 h-4 mr-2" />
+                            Load demo data
+                        </Button>
+                        <p className="text-sm text-gray-500 mt-2">
+                            Fill the app with a realistic sample month — accounts, income, expenses, bills,
+                            credit cards, and savings goals — so you can explore every screen without entering
+                            anything. This replaces all data currently on this device.
+                        </p>
+                    </CardContent>
+                </Card>
+
                 {/* App Info */}
                 <Card>
                     <CardHeader>
@@ -346,7 +381,7 @@ export default function SettingsPage() {
                             <p>
                                 <span className="font-medium">Budget Tracker</span> - Personal Finance Manager
                             </p>
-                            <p>Version: 1.0.0</p>
+                            <p>Version: {process.env.NEXT_PUBLIC_APP_VERSION}</p>
                             <p>
                                 Built with Next.js, React, and Tailwind CSS. All data is stored locally in your
                                 browser.

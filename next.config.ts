@@ -1,8 +1,17 @@
 import type { NextConfig } from "next";
+import pkg from "./package.json" with { type: "json" };
 
 const nextConfig: NextConfig = {
-  // Export static site for Capacitor by enabling `output: 'export'`.
+  // Static export: this is a local-first app with no server component to its
+  // data model, so every route is a static document and the service worker can
+  // precache the whole site. (This originally existed to feed Capacitor's
+  // webDir; Capacitor has since been removed, but the choice still stands.)
   output: 'export',
+  // Surfaced in the Settings > About card so the displayed version cannot
+  // drift from the real one.
+  env: {
+    NEXT_PUBLIC_APP_VERSION: pkg.version,
+  },
   // Disable Next.js Image Optimization for static export builds
   images: {
     unoptimized: true,
