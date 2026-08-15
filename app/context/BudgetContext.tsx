@@ -15,6 +15,7 @@ import type {
     SavingsContribution,
     MonthlyBudget,
     AppSettings,
+    Transfer,
     DEFAULT_INCOME_CATEGORIES,
     DEFAULT_EXPENSE_CATEGORIES,
     DEFAULT_SETTINGS,
@@ -58,7 +59,7 @@ type Action =
     | { type: 'UPDATE_ACCOUNT'; payload: Account }
     | { type: 'DELETE_ACCOUNT'; payload: string }
     | { type: 'UPDATE_ACCOUNT_BALANCE'; payload: { id: string; amount: number; operation: 'add' | 'subtract' } }
-    | { type: 'TRANSFER_FUNDS'; payload: { fromAccountId: string; toAccountId: string; amount: number } }
+    | { type: 'TRANSFER_FUNDS'; payload: Transfer }
     // Income
     | { type: 'ADD_INCOME'; payload: Income }
     | { type: 'UPDATE_INCOME'; payload: Income }
@@ -187,50 +188,7 @@ export function budgetReducer(state: AppState, action: Action): AppState {
             }
 
         case 'TRANSFER_FUNDS':
-            {
-                const linkedGoals = state.savingsGoals.filter(
-                    (g) => g.linkedAccountId === action.payload.toAccountId
-                )
-                const linkedSourceGoals = state.savingsGoals.filter(
-                    (g) => g.linkedAccountId === action.payload.fromAccountId
-                )
-                const updatedAccounts = state.accounts.map((a) => {
-                    if (a.id === action.payload.fromAccountId) {
-                        return { ...a, balance: a.balance - action.payload.amount }
-                    }
-                    if (a.id === action.payload.toAccountId) {
-                        return { ...a, balance: a.balance + action.payload.amount }
-                    }
-                    return a
-                })
-                const syncedGoals = state.savingsGoals.map((g) => {
-                    if (!g.linkedAccountId) return g
-                    const linkedAccount = updatedAccounts.find((a) => a.id === g.linkedAccountId)
-                    return linkedAccount ? { ...g, currentAmount: linkedAccount.balance } : g
-                })
-                const transferContributions: SavingsContribution[] = linkedGoals.map((goal) => ({
-                    id: uuidv4(),
-                    savingsGoalId: goal.id,
-                    amount: action.payload.amount,
-                    date: new Date().toISOString().slice(0, 10),
-                    fromAccountId: action.payload.fromAccountId,
-                    notes: 'Transfer to linked savings account',
-                }))
-                const transferOutContributions: SavingsContribution[] = linkedSourceGoals.map((goal) => ({
-                    id: uuidv4(),
-                    savingsGoalId: goal.id,
-                    amount: -action.payload.amount,
-                    date: new Date().toISOString().slice(0, 10),
-                    fromAccountId: action.payload.fromAccountId,
-                    notes: 'Transfer out of linked savings account',
-                }))
-                return {
-                    ...state,
-                    accounts: updatedAccounts,
-                    savingsGoals: syncedGoals,
-                    savingsContributions: [...state.savingsContributions, ...transferContributions, ...transferOutContributions],
-                }
-            }
+            return { ...state, transfers: [...state.transfers, action.payload] }
 
         // Income
         case 'ADD_INCOME': {
@@ -904,7 +862,7 @@ type BudgetContextType = {
     updateAccount: (account: Account) => void
     deleteAccount: (id: string) => void
     updateAccountBalance: (id: string, amount: number, operation: 'add' | 'subtract') => void
-    transferFunds: (fromAccountId: string, toAccountId: string, amount: number) => void
+    transferFunds: (transfer: Omit<Transfer, 'id'>) => void
     // Income
     addIncome: (income: Omit<Income, 'id'>) => void
     updateIncome: (income: Income) => void
@@ -1029,8 +987,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         dispatch({ type: 'UPDATE_ACCOUNT_BALANCE', payload: { id, amount, operation } })
     }, [])
 
-    const transferFunds = useCallback((fromAccountId: string, toAccountId: string, amount: number) => {
-        dispatch({ type: 'TRANSFER_FUNDS', payload: { fromAccountId, toAccountId, amount } })
+    const transferFunds = useCallback((transfer: Omit<Transfer, 'id'>) => {
+        dispatch({ type: 'TRANSFER_FUNDS', payload: { ...transfer, id: uuidv4() } })
     }, [])
 
     // Income functions

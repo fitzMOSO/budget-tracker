@@ -85,7 +85,12 @@ export function QuickActions() {
             return
         }
 
-        transferFunds(transferData.fromAccountId, transferData.toAccountId, amount)
+        transferFunds({
+            fromAccountId: transferData.fromAccountId,
+            toAccountId: transferData.toAccountId,
+            amount,
+            date: getTodayISO(),
+        })
         showSuccess('Transfer completed successfully!')
         handleCloseTransferModal()
     }

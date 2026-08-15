@@ -145,7 +145,12 @@ function QuickAddContent() {
             return
         }
 
-        transferFunds(transferData.fromAccountId, transferData.toAccountId, amount)
+        transferFunds({
+            fromAccountId: transferData.fromAccountId,
+            toAccountId: transferData.toAccountId,
+            amount,
+            date: getTodayISO(),
+        })
         showSuccess('Transfer completed successfully!')
         router.push('/')
     }
