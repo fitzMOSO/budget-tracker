@@ -1,6 +1,6 @@
 'use client'
 
-import React, { createContext, useContext, useReducer, useEffect, useCallback } from 'react'
+import React, { createContext, useContext, useReducer, useEffect, useCallback, useRef } from 'react'
 import { v4 as uuidv4 } from 'uuid'
 import type {
     AppState,
@@ -95,14 +95,25 @@ type Action =
     // Import
     | { type: 'IMPORT_DATA'; payload: Partial<AppState> }
 
+export function seedState(): AppState {
+    return {
+        ...initialState,
+        categories: [
+            ...defaultIncomeCategories.map((c) => ({ ...c, id: uuidv4() })),
+            ...defaultExpenseCategories.map((c) => ({ ...c, id: uuidv4() })),
+        ],
+        accounts: defaultAccounts.map((a) => ({ ...a, id: uuidv4() })),
+    }
+}
+
 // Reducer
-function reducer(state: AppState, action: Action): AppState {
+export function budgetReducer(state: AppState, action: Action): AppState {
     switch (action.type) {
         case 'LOAD_STATE':
             return action.payload
 
         case 'RESET_STATE':
-            return initialState
+            return { ...seedState(), settings: state.settings }
 
         // Categories
         case 'ADD_CATEGORY':
@@ -936,9 +947,10 @@ const BudgetContext = createContext<BudgetContextType | undefined>(undefined)
 
 // Provider
 export function BudgetProvider({ children }: { children: React.ReactNode }) {
-    const [state, dispatch] = useReducer(reducer, initialState)
+    const [state, dispatch] = useReducer(budgetReducer, initialState)
     const [isLoading, setIsLoading] = React.useState(true)
     const [isInitialized, setIsInitialized] = React.useState(false)
+    const loadFailedRef = useRef(false)
 
     // Load from localStorage on mount
     useEffect(() => {
@@ -955,19 +967,12 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
                 console.log('Loaded state with', parsedState.incomes?.length || 0, 'incomes')
             } else {
                 // Initialize with default categories and accounts
-                const defaultCategories: Category[] = [
-                    ...defaultIncomeCategories.map((c) => ({ ...c, id: uuidv4() })),
-                    ...defaultExpenseCategories.map((c) => ({ ...c, id: uuidv4() })),
-                ]
-                const defaultAccountsList: Account[] = defaultAccounts.map(a => ({ ...a, id: uuidv4() }))
-                dispatch({
-                    type: 'LOAD_STATE',
-                    payload: { ...initialState, categories: defaultCategories, accounts: defaultAccountsList },
-                })
+                dispatch({ type: 'LOAD_STATE', payload: seedState() })
                 console.log('Initialized with default categories and accounts')
             }
         } catch (error) {
             console.error('Error loading state from localStorage:', error)
+            loadFailedRef.current = true
         } finally {
             setIsLoading(false)
             setIsInitialized(true)
@@ -976,6 +981,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
     // Save to localStorage on state change - only after initialization
     useEffect(() => {
+        if (loadFailedRef.current) return // never overwrite data we could not read
         if (isInitialized && !isLoading) {
             try {
                 localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
