@@ -513,7 +513,7 @@ npm i -D workbox-cli
 module.exports = {
   globDirectory: 'out',
   globPatterns: ['**/*.{html,js,css,png,svg,ico,json,woff,woff2}'],
-  globIgnores: ['sw.js', '_headers'],
+  globIgnores: ['sw.js', '_headers', '**/*.txt'],
   modifyURLPrefix: { '': '/' },
   dontCacheBustURLsMatching: /^\/_next\/static\//,
   swSrc: 'app/sw.js',
@@ -549,12 +549,13 @@ const CACHE_NAME = CACHE_PREFIX + hashManifest(MANIFEST)
 const PRECACHE_URLS = MANIFEST.map((e) => e.url)
 
 // Map a navigation request to its precached document.
-// Static export writes '/expenses' as '/expenses/index.html'.
+// Next's native static export writes '/expenses' as '/expenses.html'
+// (flat), NOT '/expenses/index.html'. Verified in Task 1.
 function documentKeyFor(url) {
   const pathname = new URL(url).pathname
   if (pathname === '/' || pathname === '') return '/index.html'
   if (pathname.endsWith('.html')) return pathname
-  return pathname.replace(/\/$/, '') + '/index.html'
+  return pathname.replace(/\/$/, '') + '.html'
 }
 
 self.addEventListener('install', (event) => {
@@ -601,7 +602,7 @@ self.addEventListener('fetch', (event) => {
           cache
             .match(documentKeyFor(request.url))
             .then((cached) => cached || fetch(request))
-            .catch(() => cache.match('/index.html'))
+            .catch(() => cache.match('/404.html') || cache.match('/index.html'))
         )
     )
     return
@@ -1350,5 +1351,21 @@ Spec coverage check against `2026-08-16-local-first-pwa-design.md`:
 | §4 README | Task 11 |
 | §5 Automated tests | Tasks 4, 7 |
 | §5 Manual verification | Task 11 |
+
+## Amendment — 2026-08-16, after Task 1
+
+Task 1 resolved its open item: `next build` under `output: 'export'` produces
+every route natively, plus `404.html` and RSC `.txt` payloads that
+`scripts/generate-out.js` dropped. The script was deleted (commit `98a0d00`).
+
+Consequence for Task 6, applied above: native export emits routes **flat**
+(`/expenses.html`), not as directory indexes (`/expenses/index.html`). Three
+edits followed — `documentKeyFor` now appends `.html`, the offline navigation
+fallback prefers the now-existing `/404.html`, and `globIgnores` excludes
+`**/*.txt` so per-route RSC payloads stay out of the precache.
+
+Had this gone unnoticed, every navigation would have missed the precache and
+fallen through to the network — the build would still pass, and offline support
+would silently not work.
 
 **Deviation from the spec, recorded here rather than silently applied:** the spec's §2 implies the service worker would call Workbox runtime helpers such as `precacheAndRoute`. It cannot — `workbox-cli injectManifest` performs token substitution without bundling, so the worker must not import npm packages. Task 6 therefore consumes the generated manifest array using plain Service Worker APIs. The division of labour the spec argued for is unchanged: Workbox generates content-hashed revisions, and nothing else.
