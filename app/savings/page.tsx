@@ -41,6 +41,7 @@ const GOAL_COLORS = [
 export default function SavingsPage() {
     const {
         state,
+        balanceOf,
         addSavingsGoal,
         updateSavingsGoal,
         deleteSavingsGoal,
@@ -135,7 +136,7 @@ export default function SavingsPage() {
             targetAmount: parseFloat(goalFormData.targetAmount),
             deadline: goalFormData.deadline || undefined,
             color: goalFormData.color,
-            currentAmount: linkedAccount ? linkedAccount.balance : 0,
+            currentAmount: linkedAccount ? balanceOf(linkedAccount.id) : 0,
             linkedAccountId: goalFormData.linkedAccountId || undefined,
         }
 
@@ -143,7 +144,7 @@ export default function SavingsPage() {
             updateSavingsGoal({
                 ...goalData,
                 id: editingGoal.id,
-                currentAmount: linkedAccount ? linkedAccount.balance : editingGoal.currentAmount,
+                currentAmount: linkedAccount ? balanceOf(linkedAccount.id) : editingGoal.currentAmount,
             })
             showSuccess('Savings goal updated!')
         } else {
@@ -490,7 +491,7 @@ export default function SavingsPage() {
                         onChange={(e) => setGoalFormData({ ...goalFormData, linkedAccountId: e.target.value })}
                         options={state.accounts.map((a) => ({
                             value: a.id,
-                            label: `${a.name} (${formatCurrency(a.balance, state.settings)})`,
+                            label: `${a.name} (${formatCurrency(balanceOf(a.id), state.settings)})`,
                         }))}
                         placeholder="Select account"
                     />
@@ -554,7 +555,7 @@ export default function SavingsPage() {
                         }
                         options={state.accounts.map((a) => ({
                             value: a.id,
-                            label: `${a.name} (${formatCurrency(a.balance, state.settings)})`
+                            label: `${a.name} (${formatCurrency(balanceOf(a.id), state.settings)})`
                         }))}
                         placeholder="Select account"
                         required

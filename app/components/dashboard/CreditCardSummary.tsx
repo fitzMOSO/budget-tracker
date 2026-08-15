@@ -19,7 +19,7 @@ export function CreditCardSummary({
     statements,
     settings,
 }: CreditCardSummaryProps) {
-    const { state, updateStatement } = useBudget()
+    const { state, balanceOf, updateStatement } = useBudget()
     const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false)
     const [paymentStatement, setPaymentStatement] = useState<CreditCardStatement | null>(null)
     const [paymentAmount, setPaymentAmount] = useState('')
@@ -278,7 +278,7 @@ export function CreditCardSummary({
                             label="Pay From Account"
                             options={state.accounts.map((account) => ({
                                 value: account.id,
-                                label: `${account.name} (${formatCurrency(account.balance, settings)})`,
+                                label: `${account.name} (${formatCurrency(balanceOf(account.id), settings)})`,
                             }))}
                             value={paymentAccountId}
                             onChange={(e) => setPaymentAccountId(e.target.value)}

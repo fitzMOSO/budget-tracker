@@ -50,7 +50,7 @@ const getAccountIcon = (type: Account['type']) => {
 }
 
 export default function AccountsPage() {
-    const { state, addAccount, updateAccount, deleteAccount, isLoading } = useBudget()
+    const { state, balances, balanceOf, addAccount, updateAccount, deleteAccount, isLoading } = useBudget()
     const { month: currentMonth, year: currentYear } = getMonthYear()
     const [selectedMonth, setSelectedMonth] = useState(currentMonth)
     const [selectedYear, setSelectedYear] = useState(currentYear)
@@ -60,7 +60,7 @@ export default function AccountsPage() {
     const [formData, setFormData] = useState({
         name: '',
         type: 'bank' as Account['type'],
-        balance: '',
+        openingBalance: '',
         color: '#3b82f6',
         isDefault: false,
     })
@@ -71,16 +71,16 @@ export default function AccountsPage() {
     }
 
     // Calculate totals
-    const totalBalance = state.accounts.reduce((sum, a) => sum + a.balance, 0)
-    const totalCash = state.accounts.filter(a => a.type === 'cash').reduce((sum, a) => sum + a.balance, 0)
-    const totalBank = state.accounts.filter(a => a.type === 'bank').reduce((sum, a) => sum + a.balance, 0)
-    const totalEWallet = state.accounts.filter(a => a.type === 'e-wallet').reduce((sum, a) => sum + a.balance, 0)
+    const totalBalance = state.accounts.reduce((sum, a) => sum + balanceOf(a.id), 0)
+    const totalCash = state.accounts.filter(a => a.type === 'cash').reduce((sum, a) => sum + balanceOf(a.id), 0)
+    const totalBank = state.accounts.filter(a => a.type === 'bank').reduce((sum, a) => sum + balanceOf(a.id), 0)
+    const totalEWallet = state.accounts.filter(a => a.type === 'e-wallet').reduce((sum, a) => sum + balanceOf(a.id), 0)
 
     const resetForm = () => {
         setFormData({
             name: '',
             type: 'bank',
-            balance: '',
+            openingBalance: '',
             color: '#3b82f6',
             isDefault: false,
         })
@@ -93,7 +93,7 @@ export default function AccountsPage() {
             setFormData({
                 name: account.name,
                 type: account.type,
-                balance: account.balance.toString(),
+                openingBalance: account.openingBalance.toString(),
                 color: account.color || '#3b82f6',
                 isDefault: account.isDefault || false,
             })
@@ -114,7 +114,7 @@ export default function AccountsPage() {
         const accountData = {
             name: formData.name,
             type: formData.type,
-            balance: parseFloat(formData.balance) || 0,
+            openingBalance: parseFloat(formData.openingBalance) || 0,
             color: formData.color,
             isDefault: formData.isDefault,
         }
@@ -260,8 +260,8 @@ export default function AccountsPage() {
 
                                         <div className="mt-4">
                                             <p className="text-sm text-gray-500">Balance</p>
-                                            <p className={`text-2xl font-bold ${account.balance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                                {formatCurrency(account.balance, state.settings)}
+                                            <p className={`text-2xl font-bold ${(balances[account.id] ?? 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                                {formatCurrency(balances[account.id] ?? 0, state.settings)}
                                             </p>
                                         </div>
 
@@ -371,11 +371,11 @@ export default function AccountsPage() {
                             required
                         />
                         <Input
-                            label="Initial Balance"
+                            label="Opening Balance"
                             type="number"
                             step="0.01"
-                            value={formData.balance}
-                            onChange={(e) => setFormData({ ...formData, balance: e.target.value })}
+                            value={formData.openingBalance}
+                            onChange={(e) => setFormData({ ...formData, openingBalance: e.target.value })}
                             placeholder="0.00"
                         />
                     </div>

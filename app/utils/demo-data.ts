@@ -38,9 +38,9 @@ function daysAhead(days: number): string {
  */
 export function buildDemoData(): Partial<AppState> {
     const accounts: Account[] = [
-        { id: id('acct', 1), name: 'Cash', type: 'cash', balance: 4500, color: '#22c55e', isDefault: true },
-        { id: id('acct', 2), name: 'BPI Savings', type: 'bank', balance: 68200, color: '#3b82f6' },
-        { id: id('acct', 3), name: 'GCash', type: 'e-wallet', balance: 3150, color: '#0070f3' },
+        { id: id('acct', 1), name: 'Cash', type: 'cash', openingBalance: 4500, color: '#22c55e', isDefault: true },
+        { id: id('acct', 2), name: 'BPI Savings', type: 'bank', openingBalance: 68200, color: '#3b82f6' },
+        { id: id('acct', 3), name: 'GCash', type: 'e-wallet', openingBalance: 3150, color: '#0070f3' },
     ]
 
     const categories: Category[] = [

@@ -10,10 +10,12 @@ interface UpcomingBillsProps {
     bills: Bill[]
     settings: AppSettings
     accounts?: Account[]
+    /** Derived balances by account id; account.openingBalance is NOT the live balance. */
+    balances?: Record<string, number>
     onPayBill?: (id: string, paidDate: string, accountId: string) => void
 }
 
-export function UpcomingBills({ bills, settings, accounts = [], onPayBill }: UpcomingBillsProps) {
+export function UpcomingBills({ bills, settings, accounts = [], balances = {}, onPayBill }: UpcomingBillsProps) {
     const sortedBills = [...bills]
         .filter((b) => !b.isPaid)
         .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
@@ -24,7 +26,7 @@ export function UpcomingBills({ bills, settings, accounts = [], onPayBill }: Upc
 
         const result = await showPaymentDialog(
             `Pay ${bill.description}?`,
-            accounts.map(acc => ({ id: acc.id, name: acc.name, balance: acc.balance })),
+            accounts.map(acc => ({ id: acc.id, name: acc.name, balance: balances[acc.id] ?? 0 })),
             bill.amount,
             settings.currencySymbol
         )

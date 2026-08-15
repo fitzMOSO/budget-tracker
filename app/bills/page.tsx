@@ -28,7 +28,7 @@ import { showPaymentDialog, showSuccess, showDeleteConfirm, showConfirm } from '
 import type { Bill, Account, Category } from '../types'
 
 export default function BillsPage() {
-    const { state, addBill, updateBill, deleteBill, payBill, unpayBill, addExpense, generateRecurringBills, isLoading } = useBudget()
+    const { state, balanceOf, addBill, updateBill, deleteBill, payBill, unpayBill, addExpense, generateRecurringBills, isLoading } = useBudget()
     const { month: currentMonth, year: currentYear } = getMonthYear()
     const [selectedMonth, setSelectedMonth] = useState(currentMonth)
     const [selectedYear, setSelectedYear] = useState(currentYear)
@@ -156,7 +156,7 @@ export default function BillsPage() {
             }
         } else {
             // Pay the bill - ask which account
-            const accounts = state.accounts.map((a: Account) => ({ id: a.id, name: `${a.name} (${formatCurrency(a.balance, state.settings)})` }))
+            const accounts = state.accounts.map((a: Account) => ({ id: a.id, name: `${a.name} (${formatCurrency(balanceOf(a.id), state.settings)})` }))
             const result = await showPaymentDialog(
                 `Pay ${bill.description}`,
                 accounts,

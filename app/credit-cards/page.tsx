@@ -49,6 +49,7 @@ const STATUS_OPTIONS = [
 export default function CreditCardsPage() {
     const {
         state,
+        balanceOf,
         addCreditCard,
         updateCreditCard,
         deleteCreditCard,
@@ -772,7 +773,7 @@ export default function CreditCardsPage() {
                             }
                             options={state.accounts.map((a) => ({
                                 value: a.id,
-                                label: `${a.name} (${formatCurrency(a.balance, state.settings)})`
+                                label: `${a.name} (${formatCurrency(balanceOf(a.id), state.settings)})`
                             }))}
                             placeholder="Select account"
                         />
@@ -951,7 +952,7 @@ export default function CreditCardsPage() {
                             onChange={(e) => setPaymentAccountId(e.target.value)}
                             options={state.accounts.map((a: Account) => ({
                                 value: a.id,
-                                label: `${a.name} (${formatCurrency(a.balance, state.settings)})`
+                                label: `${a.name} (${formatCurrency(balanceOf(a.id), state.settings)})`
                             }))}
                             placeholder="Select account"
                             required

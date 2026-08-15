@@ -2,6 +2,7 @@
 
 import * as XLSX from 'xlsx'
 import type { AppState } from '../types'
+import { computeBalances } from './balances'
 
 // Helper function to format currency for export
 const formatAmount = (amount: number, symbol: string) => {
@@ -29,6 +30,8 @@ const getCreditCardName = (cardId: string, cards: AppState['creditCards']) => {
 export const exportToExcel = (state: AppState, filename: string = 'budget-tracker-analytics') => {
     const workbook = XLSX.utils.book_new()
     const symbol = state.settings.currencySymbol
+    // Account balances are derived, never stored on the account itself.
+    const balances = computeBalances(state)
 
     // ============== OVERVIEW SHEET ==============
     const now = new Date()
@@ -41,7 +44,7 @@ export const exportToExcel = (state: AppState, filename: string = 'budget-tracke
     const totalBillsPaid = state.bills.filter(b => b.isPaid).reduce((sum, b) => sum + b.amount, 0)
     const totalBillsUnpaid = state.bills.filter(b => !b.isPaid).reduce((sum, b) => sum + b.amount, 0)
     const totalSavings = state.savingsGoals.reduce((sum, g) => sum + g.currentAmount, 0)
-    const totalAccountBalance = state.accounts.reduce((sum, a) => sum + a.balance, 0)
+    const totalAccountBalance = state.accounts.reduce((sum, a) => sum + (balances[a.id] ?? 0), 0)
     const totalCreditCardDebt = state.creditCardStatements
         .filter(s => s.status !== 'paid')
         .reduce((sum, s) => sum + (s.statementBalance - s.amountPaid), 0)
@@ -63,7 +66,7 @@ export const exportToExcel = (state: AppState, filename: string = 'budget-tracke
         { Metric: '', Value: '' },
         { Metric: '=== ACCOUNT BALANCES ===', Value: '' },
         { Metric: 'Total Account Balance', Value: formatAmount(totalAccountBalance, symbol) },
-        ...state.accounts.map(a => ({ Metric: `  - ${a.name} (${a.type})`, Value: formatAmount(a.balance, symbol) })),
+        ...state.accounts.map(a => ({ Metric: `  - ${a.name} (${a.type})`, Value: formatAmount(balances[a.id] ?? 0, symbol) })),
         { Metric: '', Value: '' },
         { Metric: '=== ALL-TIME SUMMARY ===', Value: '' },
         { Metric: 'Total Income (All Time)', Value: formatAmount(totalIncome, symbol) },

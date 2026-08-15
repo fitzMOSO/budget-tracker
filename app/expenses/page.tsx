@@ -34,7 +34,7 @@ const EXPENSE_TYPES = [
 ]
 
 export default function ExpensesPage() {
-    const { state, addExpense, updateExpense, deleteExpense, addBill, payBill, isLoading } = useBudget()
+    const { state, balanceOf, addExpense, updateExpense, deleteExpense, addBill, payBill, isLoading } = useBudget()
     const { month: currentMonth, year: currentYear } = getMonthYear()
     const [selectedMonth, setSelectedMonth] = useState(currentMonth)
     const [selectedYear, setSelectedYear] = useState(currentYear)
@@ -404,7 +404,7 @@ export default function ExpensesPage() {
                         onChange={(e) => setFormData({ ...formData, accountId: e.target.value })}
                         options={state.accounts.map((a: Account) => ({
                             value: a.id,
-                            label: `${a.name} (${formatCurrency(a.balance, state.settings)})`
+                            label: `${a.name} (${formatCurrency(balanceOf(a.id), state.settings)})`
                         }))}
                         placeholder="Select account"
                         required

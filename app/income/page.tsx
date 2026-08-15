@@ -10,7 +10,7 @@ import { showSuccess, showDeleteConfirm } from '../utils/swal'
 import type { Income, Category, Account } from '../types'
 
 export default function IncomePage() {
-    const { state, addIncome, updateIncome, deleteIncome, isLoading } = useBudget()
+    const { state, balanceOf, addIncome, updateIncome, deleteIncome, isLoading } = useBudget()
     const { month: currentMonth, year: currentYear } = getMonthYear()
     const [selectedMonth, setSelectedMonth] = useState(currentMonth)
     const [selectedYear, setSelectedYear] = useState(currentYear)
@@ -306,7 +306,7 @@ export default function IncomePage() {
                         onChange={(e) => setFormData({ ...formData, accountId: e.target.value })}
                         options={state.accounts.map((a: Account) => ({
                             value: a.id,
-                            label: `${a.name} (${formatCurrency(a.balance, state.settings)})`
+                            label: `${a.name} (${formatCurrency(balanceOf(a.id), state.settings)})`
                         }))}
                         placeholder="Select account"
                         required
