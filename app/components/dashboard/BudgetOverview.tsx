@@ -12,6 +12,29 @@ interface BudgetOverviewProps {
     settings: AppSettings
 }
 
+// Defined at module scope, not inside BudgetOverview: a component created
+// during render is a brand-new type on every render, so React unmounts and
+// remounts its subtree instead of updating it. Recharts clones this element
+// and injects `active` and `payload`.
+function CustomTooltip({
+    active,
+    payload,
+    settings,
+}: {
+    active?: boolean
+    payload?: Array<{ name: string; value: number; payload: { color: string } }>
+    settings: AppSettings
+}) {
+    if (!active || !payload || payload.length === 0) return null
+
+    return (
+        <div className="bg-white/95 backdrop-blur-sm px-3 py-2 rounded-lg shadow-lg border border-gray-100">
+            <p className="text-sm font-medium text-gray-900">{payload[0].name}</p>
+            <p className="text-sm text-gray-600">{formatCurrency(payload[0].value, settings)}</p>
+        </div>
+    )
+}
+
 export function BudgetOverview({ summary, settings }: BudgetOverviewProps) {
     const data = [
         {
@@ -65,19 +88,6 @@ export function BudgetOverview({ summary, settings }: BudgetOverviewProps) {
         return 'bg-emerald-500'
     }
 
-    // Custom tooltip for the pie chart
-    const CustomTooltip = ({ active, payload }: { active?: boolean; payload?: Array<{ name: string; value: number; payload: { color: string } }> }) => {
-        if (active && payload && payload.length) {
-            return (
-                <div className="bg-white/95 backdrop-blur-sm px-3 py-2 rounded-lg shadow-lg border border-gray-100">
-                    <p className="text-sm font-medium text-gray-900">{payload[0].name}</p>
-                    <p className="text-sm text-gray-600">{formatCurrency(payload[0].value, settings)}</p>
-                </div>
-            )
-        }
-        return null
-    }
-
     return (
         <Card className="h-full">
             <CardHeader>
@@ -116,7 +126,7 @@ export function BudgetOverview({ summary, settings }: BudgetOverviewProps) {
                                         <Cell key={`cell-${index}`} fill={entry.color} />
                                     ))}
                                 </Pie>
-                                <Tooltip content={<CustomTooltip />} />
+                                <Tooltip content={<CustomTooltip settings={settings} />} />
                             </PieChart>
                         </ResponsiveContainer>
 

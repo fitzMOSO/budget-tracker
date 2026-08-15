@@ -1,4 +1,3 @@
-/* eslint-disable no-undef */
 // Precache manifest injected at build time by workbox-cli. Each entry is
 // { url, revision }. workbox-cli only substitutes this token; it does not
 // bundle, so this file must not import anything.

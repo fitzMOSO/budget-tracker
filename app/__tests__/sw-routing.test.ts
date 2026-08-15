@@ -19,7 +19,6 @@ function loadDocumentKeyFor(): (url: string) => string {
   if (!match) {
     throw new Error('documentKeyFor not found in app/sw.js')
   }
-  // eslint-disable-next-line no-new-func
   return new Function(`${match[0]}; return documentKeyFor`)()
 }
 

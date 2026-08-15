@@ -1,26 +1,29 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useSyncExternalStore } from 'react'
 import { WifiOff } from 'lucide-react'
 
+function subscribe(onChange: () => void) {
+    window.addEventListener('online', onChange)
+    window.addEventListener('offline', onChange)
+    return () => {
+        window.removeEventListener('online', onChange)
+        window.removeEventListener('offline', onChange)
+    }
+}
+
+const getSnapshot = () => navigator.onLine
+// The static export has no notion of connectivity; assume online so the
+// prerendered markup matches the first client render and nothing flashes.
+const getServerSnapshot = () => true
+
 export function OfflineIndicator() {
-    // Starts false rather than reading navigator.onLine during render, so the
-    // static export and the first client render agree; the effect corrects it.
-    const [isOffline, setIsOffline] = useState(false)
+    // useSyncExternalStore rather than useState + useEffect: connectivity is
+    // external browser state, and subscribing to it directly avoids setting
+    // state during an effect (which triggers a cascading render).
+    const isOnline = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot)
 
-    useEffect(() => {
-        setIsOffline(!navigator.onLine)
-        const goOffline = () => setIsOffline(true)
-        const goOnline = () => setIsOffline(false)
-        window.addEventListener('offline', goOffline)
-        window.addEventListener('online', goOnline)
-        return () => {
-            window.removeEventListener('offline', goOffline)
-            window.removeEventListener('online', goOnline)
-        }
-    }, [])
-
-    if (!isOffline) return null
+    if (isOnline) return null
 
     // The copy reassures rather than warns: offline is a supported state for a
     // local-first app, not an error.
