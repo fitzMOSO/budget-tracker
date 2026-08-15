@@ -40,6 +40,8 @@ const initialState: AppState = {
     savingsGoals: [],
     savingsContributions: [],
     monthlyBudgets: [],
+    transfers: [],
+    schemaVersion: 2,
     settings: defaultSettings,
 }
 
