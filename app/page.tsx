@@ -14,7 +14,7 @@ import { useBudget } from './context/BudgetContext'
 import { filterByMonth, calculateBudgetSummary, getMonthYear } from './utils'
 
 export default function DashboardPage() {
-  const { state, balances, isLoading, generateRecurringBills, payBill, isBillPaid } = useBudget()
+  const { state, balances, progressOfGoal, isLoading, generateRecurringBills, payBill, isBillPaid } = useBudget()
   const { month: currentMonth, year: currentYear } = getMonthYear()
   const [selectedMonth, setSelectedMonth] = useState(currentMonth)
   const [selectedYear, setSelectedYear] = useState(currentYear)
@@ -118,6 +118,7 @@ export default function DashboardPage() {
           <SavingsGoals
             savingsGoals={state.savingsGoals}
             settings={state.settings}
+            progressOfGoal={progressOfGoal}
           />
         </div>
       </div>

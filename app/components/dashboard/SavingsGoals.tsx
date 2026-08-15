@@ -8,9 +8,14 @@ import type { SavingsGoal, AppSettings } from '../../types'
 interface SavingsGoalsProps {
     savingsGoals: SavingsGoal[]
     settings: AppSettings
+    /**
+     * Derived progress, injected rather than read off the goal: the dashboard and
+     * the savings page must not be able to disagree about how much is saved.
+     */
+    progressOfGoal: (goal: SavingsGoal) => number
 }
 
-export function SavingsGoals({ savingsGoals, settings }: SavingsGoalsProps) {
+export function SavingsGoals({ savingsGoals, settings, progressOfGoal }: SavingsGoalsProps) {
     return (
         <Card className="h-full">
             <CardHeader>
@@ -22,7 +27,8 @@ export function SavingsGoals({ savingsGoals, settings }: SavingsGoalsProps) {
                 ) : (
                     <div className="space-y-4">
                         {savingsGoals.map((goal) => {
-                            const percentage = getProgressPercentage(goal.currentAmount, goal.targetAmount)
+                            const saved = progressOfGoal(goal)
+                            const percentage = getProgressPercentage(saved, goal.targetAmount)
                             return (
                                 <div key={goal.id} className="space-y-2">
                                     <div className="flex justify-between items-center">
@@ -30,13 +36,13 @@ export function SavingsGoals({ savingsGoals, settings }: SavingsGoalsProps) {
                                         <span className="text-sm text-gray-500">{percentage}%</span>
                                     </div>
                                     <ProgressBar
-                                        value={goal.currentAmount}
+                                        value={saved}
                                         max={goal.targetAmount}
                                         color={goal.color || 'bg-blue-600'}
                                         size="md"
                                     />
                                     <div className="flex justify-between text-sm text-gray-600">
-                                        <span>{formatCurrency(goal.currentAmount, settings)}</span>
+                                        <span>{formatCurrency(saved, settings)}</span>
                                         <span>{formatCurrency(goal.targetAmount, settings)}</span>
                                     </div>
                                 </div>

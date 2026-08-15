@@ -2,7 +2,7 @@
 
 import * as XLSX from 'xlsx'
 import type { AppState } from '../types'
-import { computeBalances, linkedBillExpense } from './balances'
+import { computeBalances, goalProgress, linkedBillExpense } from './balances'
 
 // Helper function to format currency for export
 const formatAmount = (amount: number, symbol: string) => {
@@ -46,7 +46,7 @@ export const exportToExcel = (state: AppState, filename: string = 'budget-tracke
     const paidBillIds = new Set(state.expenses.map(e => e.billId).filter(Boolean) as string[])
     const totalBillsPaid = state.bills.filter(b => paidBillIds.has(b.id)).reduce((sum, b) => sum + b.amount, 0)
     const totalBillsUnpaid = state.bills.filter(b => !paidBillIds.has(b.id)).reduce((sum, b) => sum + b.amount, 0)
-    const totalSavings = state.savingsGoals.reduce((sum, g) => sum + g.currentAmount, 0)
+    const totalSavings = state.savingsGoals.reduce((sum, g) => sum + goalProgress(state, g), 0)
     const totalAccountBalance = state.accounts.reduce((sum, a) => sum + (balances[a.id] ?? 0), 0)
     const totalCreditCardDebt = state.creditCardStatements
         .filter(s => s.status !== 'paid')
@@ -276,13 +276,15 @@ export const exportToExcel = (state: AppState, filename: string = 'budget-tracke
     // ============== SAVINGS GOALS SHEET ==============
     const savingsData = state.savingsGoals.map(g => {
         const contributions = state.savingsContributions.filter(c => c.savingsGoalId === g.id)
-        const progress = (g.currentAmount / g.targetAmount) * 100
-        
+        // Derived, like every other money figure in this export.
+        const saved = goalProgress(state, g)
+        const progress = (saved / g.targetAmount) * 100
+
         return {
             'Goal Name': g.name,
             'Target Amount': formatAmount(g.targetAmount, symbol),
-            'Current Amount': formatAmount(g.currentAmount, symbol),
-            'Remaining': formatAmount(g.targetAmount - g.currentAmount, symbol),
+            'Current Amount': formatAmount(saved, symbol),
+            'Remaining': formatAmount(g.targetAmount - saved, symbol),
             Progress: progress.toFixed(1) + '%',
             Deadline: g.deadline || 'No deadline',
             'Total Contributions': contributions.length,

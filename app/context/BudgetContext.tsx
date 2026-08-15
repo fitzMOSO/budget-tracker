@@ -27,7 +27,7 @@ import {
     DEFAULT_ACCOUNTS as defaultAccounts,
 } from '../types'
 import { migrate, relinkImportedBills, CURRENT_SCHEMA_VERSION, V1_BACKUP_KEY } from '../utils/migrations'
-import { computeBalances } from '../utils/balances'
+import { computeBalanceMap, goalProgress } from '../utils/balances'
 import { buildBillExpense } from '../utils/bill-payment'
 import { checkDelete, cascadeDelete, type DeleteCheck } from '../utils/integrity'
 
@@ -447,76 +447,25 @@ export function budgetReducer(state: AppState, action: Action): AppState {
             return cascadeDelete(state, 'savingsGoal', action.payload)
 
         // Savings Contributions
-        case 'ADD_SAVINGS_CONTRIBUTION': {
-            const contribution = action.payload
+        // Savings contributions are plain records. Goal progress is derived from
+        // them (utils/balances#goalProgress), so these cases keep no running
+        // total on the goal — the running total was the drift.
+        case 'ADD_SAVINGS_CONTRIBUTION':
+            return { ...state, savingsContributions: [...state.savingsContributions, action.payload] }
 
-            // Account balances are derived from the contribution itself (see utils/balances).
-            const updatedGoals = state.savingsGoals.map((g) =>
-                g.id === contribution.savingsGoalId && !g.linkedAccountId
-                    ? { ...g, currentAmount: g.currentAmount + contribution.amount }
-                    : g
-            )
-
-            return {
-                ...state,
-                savingsContributions: [...state.savingsContributions, contribution],
-                savingsGoals: updatedGoals,
-            }
-        }
-
-        case 'UPDATE_SAVINGS_CONTRIBUTION': {
-            const updatedContribution = action.payload
-            const oldContribution = state.savingsContributions.find((c) => c.id === updatedContribution.id)
-
-            // Update savings goals amounts (only for unlinked goals)
-            let updatedGoals = state.savingsGoals
-            if (oldContribution) {
-                if (oldContribution.savingsGoalId !== updatedContribution.savingsGoalId) {
-                    updatedGoals = state.savingsGoals.map((g) => {
-                        if (g.id === oldContribution.savingsGoalId && !g.linkedAccountId) {
-                            return { ...g, currentAmount: g.currentAmount - oldContribution.amount }
-                        }
-                        if (g.id === updatedContribution.savingsGoalId && !g.linkedAccountId) {
-                            return { ...g, currentAmount: g.currentAmount + updatedContribution.amount }
-                        }
-                        return g
-                    })
-                } else {
-                    const diff = updatedContribution.amount - oldContribution.amount
-                    updatedGoals = state.savingsGoals.map((g) =>
-                        g.id === updatedContribution.savingsGoalId && !g.linkedAccountId
-                            ? { ...g, currentAmount: g.currentAmount + diff }
-                            : g
-                    )
-                }
-            }
-
+        case 'UPDATE_SAVINGS_CONTRIBUTION':
             return {
                 ...state,
                 savingsContributions: state.savingsContributions.map((c) =>
-                    c.id === updatedContribution.id ? updatedContribution : c
+                    c.id === action.payload.id ? action.payload : c
                 ),
-                savingsGoals: updatedGoals,
             }
-        }
 
-        case 'DELETE_SAVINGS_CONTRIBUTION': {
-            const contributionToDelete = state.savingsContributions.find((c) => c.id === action.payload)
-
-            const updatedGoalsAfterDelete = contributionToDelete
-                ? state.savingsGoals.map((g) =>
-                    g.id === contributionToDelete.savingsGoalId && !g.linkedAccountId
-                        ? { ...g, currentAmount: g.currentAmount - contributionToDelete.amount }
-                        : g
-                )
-                : state.savingsGoals
-
+        case 'DELETE_SAVINGS_CONTRIBUTION':
             return {
                 ...state,
                 savingsContributions: state.savingsContributions.filter((c) => c.id !== action.payload),
-                savingsGoals: updatedGoalsAfterDelete,
             }
-        }
 
         // Monthly Budget
         case 'SET_MONTHLY_BUDGET':
@@ -565,6 +514,8 @@ type BudgetContextType = {
     /** Derived live balances by account id: openingBalance + every recorded effect. */
     balances: Record<string, number>
     balanceOf: (accountId: string) => number
+    /** Derived goal progress: the linked account's balance, or Σ contributions. */
+    progressOfGoal: (goal: SavingsGoal) => number
     // Categories
     addCategory: (category: Omit<Category, 'id'>) => void
     updateCategory: (category: Category) => void
@@ -683,8 +634,16 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     }, [state, isLoading, isInitialized])
 
     // Derived balances — the single source of truth for "how much is in this account".
-    const balances = useMemo(() => computeBalances(state), [state])
-    const balanceOf = useCallback((accountId: string) => balances[accountId] ?? 0, [balances])
+    // The Map is the primitive; the record is the render-friendly view of it.
+    // `balances[id] ?? 0` on the record would resolve an unknown id of
+    // 'constructor'/'toString' through Object.prototype and return a function.
+    const balanceMap = useMemo(() => computeBalanceMap(state), [state])
+    const balances = useMemo(() => Object.fromEntries(balanceMap), [balanceMap])
+    const balanceOf = useCallback((accountId: string) => balanceMap.get(accountId) ?? 0, [balanceMap])
+    const progressOfGoal = useCallback(
+        (goal: SavingsGoal) => goalProgress(state, goal),
+        [state],
+    )
 
     // Category functions
     const addCategory = useCallback((category: Omit<Category, 'id'>) => {
@@ -902,6 +861,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         isLoading,
         balances,
         balanceOf,
+        progressOfGoal,
         addCategory,
         updateCategory,
         deleteCategory,

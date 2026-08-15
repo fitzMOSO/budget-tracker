@@ -90,9 +90,13 @@ export function buildDemoData(): Partial<AppState> {
         { id: id('stmt', 2), creditCardId: id('card', 1), statementBalance: 13500, amountPaid: 5000, dueDate: daysAhead(10), status: 'partial', paidFromAccountId: id('acct', 2) },
     ]
 
+    // `currentAmount` is a migration remnant nothing reads: progress is derived
+    // from the contributions below (utils/balances#goalProgress). Targets are
+    // sized so the demo's contributions read as a plausible early balance rather
+    // than a number the demo shows but cannot account for.
     const savingsGoals: SavingsGoal[] = [
-        { id: id('goal', 1), name: 'Emergency Fund', targetAmount: 180000, currentAmount: 62000, color: '#22c55e' },
-        { id: id('goal', 2), name: 'Japan Trip', targetAmount: 120000, currentAmount: 28500, deadline: '2027-03-01', color: '#3b82f6' },
+        { id: id('goal', 1), name: 'Emergency Fund', targetAmount: 60000, currentAmount: 0, color: '#22c55e' },
+        { id: id('goal', 2), name: 'Japan Trip', targetAmount: 30000, currentAmount: 0, deadline: '2027-03-01', color: '#3b82f6' },
     ]
 
     const savingsContributions: SavingsContribution[] = [
