@@ -55,7 +55,6 @@ export default function RootLayout({
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
         <meta name="apple-mobile-web-app-title" content="Budget Tracker" />
         <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
-        <link rel="mask-icon" href="/icons/icon-512.png" color="#3b82f6" />
       </head>
       <body className={`${inter.variable} antialiased font-sans`}>
         <BudgetProvider>{children}</BudgetProvider>
