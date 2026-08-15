@@ -3,6 +3,7 @@ import { Inter } from "next/font/google"
 import "./globals.css"
 import { BudgetProvider } from "./context/BudgetContext"
 import { ServiceWorkerRegistration } from "./components/ServiceWorkerRegistration"
+import { OfflineIndicator } from "./components/OfflineIndicator"
 
 const inter = Inter({
   variable: "--font-inter",
@@ -57,6 +58,7 @@ export default function RootLayout({
         <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
       </head>
       <body className={`${inter.variable} antialiased font-sans`}>
+        <OfflineIndicator />
         <BudgetProvider>{children}</BudgetProvider>
         <ServiceWorkerRegistration />
       </body>
