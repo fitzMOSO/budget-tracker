@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "build:web": "next build",
+    "build:web": "next build && workbox injectManifest workbox.config.js",
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
@@ -38,6 +38,7 @@
     "jsdom": "^30.0.1",
     "tailwindcss": "^4",
     "typescript": "^5",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.10",
+    "workbox-cli": "^7.4.1"
   }
 }

@@ -1368,4 +1368,40 @@ Had this gone unnoticed, every navigation would have missed the precache and
 fallen through to the network — the build would still pass, and offline support
 would silently not work.
 
+## Amendment — 2026-08-16, during Task 6
+
+The Task 1 amendment above concluded that `documentKeyFor` should append
+`.html`, mapping `/expenses` to the flat precache entry `/expenses.html`. That
+conclusion was right about the *filenames* and wrong about the *URLs*, and it is
+now reversed.
+
+Verification against a real static server showed both `serve` and Netlify's
+Pretty URLs answer `/expenses.html` with a **301 to `/expenses`**. Precaching the
+`.html` form would therefore have stored a response with `redirected: true`, and
+serving such a response for a navigation request throws:
+
+> The FetchEvent resulted in a network error response: a redirected response was
+> used for a request whose redirect mode is not "follow".
+
+This is the failure Workbox ships `copyRedirectedCacheableResponsesPlugin` to
+work around. It would have broken **every** offline navigation while leaving the
+build, the injected manifest, and the URL count all looking healthy.
+
+Three edits followed:
+
+1. `workbox.config.js` gained a `manifestTransforms` entry rewriting
+   `index.html` → `/` and `foo.html` → `/foo`, so precache keys are the URLs the
+   hosts actually serve. (The option is `manifestTransforms` — plural and
+   array-valued; the singular form fails validation.)
+2. `documentKeyFor` simplified accordingly — a navigation's pathname now *is* its
+   precache key, needing only trailing-slash and stray-`.html` normalisation. It
+   is pinned by `app/__tests__/sw-routing.test.ts`, which evaluates the function
+   out of the real `app/sw.js` source rather than a copy of it.
+3. `404.html` was dropped from the precache and the offline fallback is now `/`.
+   `/404` is not guaranteed to resolve on every static host, and one failing URL
+   rejects the whole `cache.addAll` and aborts the install.
+
+Verified by fetching all 67 precache URLs with `redirect: 'manual'`: all 200, no
+redirects, so the install cannot cache a redirected response.
+
 **Deviation from the spec, recorded here rather than silently applied:** the spec's §2 implies the service worker would call Workbox runtime helpers such as `precacheAndRoute`. It cannot — `workbox-cli injectManifest` performs token substitution without bundling, so the worker must not import npm packages. Task 6 therefore consumes the generated manifest array using plain Service Worker APIs. The division of labour the spec argued for is unchanged: Workbox generates content-hashed revisions, and nothing else.
