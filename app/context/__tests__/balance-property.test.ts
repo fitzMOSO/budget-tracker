@@ -9,11 +9,18 @@
 // state, so it applies to reducer cases nobody has written yet: a future case
 // that debits an account twice, forgets to reverse a delete, or reintroduces a
 // stored running total fails here without anyone adding a test.
+//
+// What it does NOT anchor: effect SIGNS. The oracle below calls the same
+// `allEffects` the implementation does, so flipping an expense to +amount would
+// move oracle and implementation together and every property here would still
+// pass. Signs are pinned only by the literal per-effect expectations in
+// `app/utils/__tests__/balances.test.ts` and by the hardcoded worked-example map
+// further down this file — do not read a green run here as sign coverage.
 import { describe, it, expect } from 'vitest'
 import { budgetReducer, seedState, type Action } from '../BudgetContext'
 import { computeBalances, allEffects } from '../../utils/balances'
 import { buildBillExpense } from '../../utils/bill-payment'
-import type { AppState, Expense, Income } from '../../types'
+import type { Account, AppState, Expense, Income } from '../../types'
 
 // ---------------------------------------------------------------------------
 // The oracle
@@ -78,13 +85,43 @@ const ACTIONS_ALLOWED_TO_TOUCH_ACCOUNTS = new Set<Action['type']>([
     'ADD_ACCOUNT',
     'UPDATE_ACCOUNT',
     'DELETE_ACCOUNT',
-    'IMPORT_DATA',
     'LOAD_STATE',
     'RESET_STATE',
 ])
 
+/** First `openingBalance` seen per id, in array order. */
+function firstOpeningBalanceById(state: AppState): Map<string, number> {
+    const seen = new Map<string, number>()
+    for (const account of state.accounts) {
+        if (!seen.has(account.id)) seen.set(account.id, account.openingBalance)
+    }
+    return seen
+}
+
 function assertOpeningBalancesStable(before: AppState, after: AppState, action: Action, where: string) {
     if (ACTIONS_ALLOWED_TO_TOUCH_ACCOUNTS.has(action.type)) return
+
+    // `IMPORT_DATA` is NOT on the allowlist above, despite editing `accounts`.
+    // It only ever APPENDS, so a wholesale exemption would let a regression that
+    // rewrote an existing account's openingBalance during import pass silently —
+    // on the one path fed externally controlled JSON. The rule it must obey is
+    // narrower: ids already present keep their openingBalance, new ids are free.
+    //
+    // Compared first-occurrence-per-id because a hand-edited backup can carry an
+    // account id the app already has. Appending that duplicate is allowed (it is
+    // a new entry); rewriting the entry that was already there is not.
+    if (action.type === 'IMPORT_DATA') {
+        const wasBefore = firstOpeningBalanceById(before)
+        const isAfter = firstOpeningBalanceById(after)
+        for (const [id, opening] of wasBefore) {
+            expect(
+                isAfter.get(id),
+                `${where}: IMPORT_DATA changed the openingBalance of existing account ${JSON.stringify(id)}`,
+            ).toBe(opening)
+        }
+        return
+    }
+
     const summarise = (s: AppState) => s.accounts.map((a) => `${a.id}=${a.openingBalance}`).join(',')
     expect(summarise(after), `${where}: ${action.type} moved a stored account balance`).toBe(summarise(before))
 }
@@ -252,9 +289,22 @@ const FACTORIES: Factory[] = [
     (rng, state, step) => ({ type: 'DELETE_CATEGORY', payload: existingId(rng, state.categories, step) }),
 
     // Import: the one action that ingests externally controlled ids.
+    //
+    // It imports ACCOUNTS too, including ids that duplicate one already in state
+    // and ids that are Object.prototype keys. Both are reachable from a
+    // hand-edited backup, and neither is ambiguous to assert against: the
+    // invariant compares the balance map's key set against a `Set` of account
+    // ids, so duplicates are already handled.
     (rng, state, step) => ({
         type: 'IMPORT_DATA',
         payload: {
+            accounts: [
+                { id: `imp-a${step}`, name: 'Imported', type: 'bank', openingBalance: money(rng) } as Account,
+                // A duplicate: either of an id already in state, or of the one
+                // this very import just added.
+                { id: pick(rng, [...state.accounts.map((a) => a.id), `imp-a${step}`]), name: 'Duplicate id', type: 'other', openingBalance: money(rng) } as Account,
+                { id: pick(rng, ['constructor', '__proto__'] as const), name: 'Prototype key', type: 'other', openingBalance: money(rng) } as Account,
+            ],
             incomes: [
                 { id: `imp-i${step}`, description: 'Imported', amount: money(rng), date: day(rng), categoryId: 'c1', accountId: pick(rng, ORPHAN_ACCOUNT_IDS) } as Income,
             ],
