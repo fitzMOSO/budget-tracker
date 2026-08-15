@@ -62,11 +62,12 @@ export function buildDemoData(): Partial<AppState> {
     ]
 
     const expenses: Expense[] = [
-        { id: id('exp', 1), description: 'Apartment rent', amount: 18000, date: daysAgo(26), categoryId: id('cat', 3), accountId: id('acct', 2), expenseType: 'essential' },
+        // billId is what makes bill 1 show as paid — bills store no isPaid flag.
+        { id: id('exp', 1), description: 'Apartment rent', amount: 18000, date: daysAgo(26), categoryId: id('cat', 3), accountId: id('acct', 2), expenseType: 'essential', billId: id('bill', 1) },
         { id: id('exp', 2), description: 'Weekly groceries', amount: 3400, date: daysAgo(21), categoryId: id('cat', 4), accountId: id('acct', 1), expenseType: 'essential' },
         { id: id('exp', 3), description: 'Weekly groceries', amount: 2950, date: daysAgo(14), categoryId: id('cat', 4), accountId: id('acct', 1), expenseType: 'essential' },
         { id: id('exp', 4), description: 'Weekly groceries', amount: 3720, date: daysAgo(7), categoryId: id('cat', 4), accountId: id('acct', 1), expenseType: 'essential' },
-        { id: id('exp', 5), description: 'Electricity bill', amount: 2840, date: daysAgo(18), categoryId: id('cat', 8), accountId: id('acct', 2), expenseType: 'essential' },
+        { id: id('exp', 5), description: 'Electricity bill', amount: 2840, date: daysAgo(18), categoryId: id('cat', 8), accountId: id('acct', 2), expenseType: 'essential', billId: id('bill', 2) },
         { id: id('exp', 6), description: 'Grab to office', amount: 890, date: daysAgo(9), categoryId: id('cat', 5), accountId: id('acct', 3), expenseType: 'essential' },
         { id: id('exp', 7), description: 'Dinner with friends', amount: 1650, date: daysAgo(6), categoryId: id('cat', 6), accountId: id('acct', 1), expenseType: 'non-essential' },
         { id: id('exp', 8), description: 'Streaming subscriptions', amount: 749, date: daysAgo(5), categoryId: id('cat', 7), accountId: id('acct', 3), expenseType: 'non-essential' },
@@ -74,9 +75,10 @@ export function buildDemoData(): Partial<AppState> {
     ]
 
     const bills: Bill[] = [
-        { id: id('bill', 1), description: 'Apartment rent', amount: 18000, dueDate: daysAgo(26), isPaid: true, paidDate: daysAgo(26), paidFromAccountId: id('acct', 2), isRecurring: true, categoryId: id('cat', 3) },
-        { id: id('bill', 2), description: 'Electricity', amount: 2840, dueDate: daysAgo(18), isPaid: true, paidDate: daysAgo(18), paidFromAccountId: id('acct', 2), isRecurring: true, categoryId: id('cat', 8) },
-        { id: id('bill', 3), description: 'Internet', amount: 1699, dueDate: daysAhead(6), isPaid: false, isRecurring: true, categoryId: id('cat', 9) },
+        // Bills 1 and 2 read as paid because exp 1 and exp 5 link back to them.
+        { id: id('bill', 1), description: 'Apartment rent', amount: 18000, dueDate: daysAgo(26), isRecurring: true, categoryId: id('cat', 3) },
+        { id: id('bill', 2), description: 'Electricity', amount: 2840, dueDate: daysAgo(18), isRecurring: true, categoryId: id('cat', 8) },
+        { id: id('bill', 3), description: 'Internet', amount: 1699, dueDate: daysAhead(6), isRecurring: true, categoryId: id('cat', 9) },
     ]
 
     const creditCards: CreditCard[] = [

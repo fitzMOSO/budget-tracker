@@ -2,7 +2,7 @@
 
 import * as XLSX from 'xlsx'
 import type { AppState } from '../types'
-import { computeBalances } from './balances'
+import { computeBalances, isPaidBill, linkedBillExpense } from './balances'
 
 // Helper function to format currency for export
 const formatAmount = (amount: number, symbol: string) => {
@@ -41,8 +41,8 @@ export const exportToExcel = (state: AppState, filename: string = 'budget-tracke
     // Calculate all-time totals
     const totalIncome = state.incomes.reduce((sum, i) => sum + i.amount, 0)
     const totalExpenses = state.expenses.reduce((sum, e) => sum + e.amount, 0)
-    const totalBillsPaid = state.bills.filter(b => b.isPaid).reduce((sum, b) => sum + b.amount, 0)
-    const totalBillsUnpaid = state.bills.filter(b => !b.isPaid).reduce((sum, b) => sum + b.amount, 0)
+    const totalBillsPaid = state.bills.filter(b => isPaidBill(state, b.id)).reduce((sum, b) => sum + b.amount, 0)
+    const totalBillsUnpaid = state.bills.filter(b => !isPaidBill(state, b.id)).reduce((sum, b) => sum + b.amount, 0)
     const totalSavings = state.savingsGoals.reduce((sum, g) => sum + g.currentAmount, 0)
     const totalAccountBalance = state.accounts.reduce((sum, a) => sum + (balances[a.id] ?? 0), 0)
     const totalCreditCardDebt = state.creditCardStatements
@@ -206,17 +206,21 @@ export const exportToExcel = (state: AppState, filename: string = 'budget-tracke
     }
 
     // ============== BILLS STATUS SHEET ==============
-    const billsData = state.bills.map(b => ({
-        Description: b.description,
-        Amount: formatAmount(b.amount, symbol),
-        'Due Date': b.dueDate,
-        Status: b.isPaid ? 'Paid' : 'Unpaid',
-        'Paid Date': b.paidDate || '',
-        'Paid From': getAccountName(b.paidFromAccountId, state.accounts),
-        Recurring: b.isRecurring ? 'Yes' : 'No',
-        Category: getCategoryName(b.categoryId || '', state.categories),
-        Notes: b.notes || '',
-    }))
+    const billsData = state.bills.map(b => {
+        // Status, paid date and paying account all come from the linked expense.
+        const payment = linkedBillExpense(state, b.id)
+        return {
+            Description: b.description,
+            Amount: formatAmount(b.amount, symbol),
+            'Due Date': b.dueDate,
+            Status: payment ? 'Paid' : 'Unpaid',
+            'Paid Date': payment?.date || '',
+            'Paid From': getAccountName(payment?.accountId, state.accounts),
+            Recurring: b.isRecurring ? 'Yes' : 'No',
+            Category: getCategoryName(b.categoryId || '', state.categories),
+            Notes: b.notes || '',
+        }
+    })
     if (billsData.length > 0) {
         const billsSheet = XLSX.utils.json_to_sheet(billsData)
         billsSheet['!cols'] = [{ wch: 30 }, { wch: 15 }, { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 20 }, { wch: 10 }, { wch: 20 }, { wch: 30 }]

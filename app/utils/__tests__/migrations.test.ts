@@ -61,6 +61,58 @@ describe('migrate v1 -> v2', () => {
         expect(migrated.expenses.filter((e) => e.billId === 'b1')).toHaveLength(1)
     })
 
+    it('strips the stored payment fields off every bill', () => {
+        const withBill = {
+            ...v1Blob,
+            accounts: [{ id: 'a1', name: 'Cash', type: 'cash', balance: 500 }],
+            bills: [{ id: 'b1', description: 'Rent', amount: 200, dueDate: '2026-08-05', isPaid: true, paidDate: '2026-08-05', paidFromAccountId: 'a1', categoryId: 'c1' }],
+        }
+        const migrated = migrate(withBill)
+
+        // Keeping these alongside the expense link would restore the two
+        // sources of truth this refactor exists to remove.
+        expect(migrated.bills[0]).not.toHaveProperty('isPaid')
+        expect(migrated.bills[0]).not.toHaveProperty('paidDate')
+        expect(migrated.bills[0]).not.toHaveProperty('paidFromAccountId')
+    })
+
+    it('links, but never re-debits, a bill paid on the current schema', () => {
+        // A bill paid before isPaid became derived: the payment expense already
+        // exists, so migrating must attach billId and leave the balance alone.
+        const currentBlob = {
+            ...v1Blob,
+            schemaVersion: CURRENT_SCHEMA_VERSION,
+            accounts: [{ id: 'a1', name: 'Cash', type: 'cash', openingBalance: 1000 }],
+            incomes: [],
+            transfers: [],
+            bills: [{ id: 'b1', description: 'Rent', amount: 200, dueDate: '2026-08-05', isPaid: true, paidDate: '2026-08-05', paidFromAccountId: 'a1', categoryId: 'c1' }],
+            expenses: [{ id: 'e9', description: 'Rent', amount: 200, date: '2026-08-05', categoryId: 'c1', accountId: 'a1', expenseType: 'essential', notes: 'Auto-created from bill payment' }],
+        }
+        const migrated = migrate(currentBlob)
+
+        expect(migrated.expenses).toHaveLength(1)
+        expect(migrated.expenses[0].billId).toBe('b1')
+        expect(computeBalances(migrated)).toEqual({ a1: 800 })
+    })
+
+    it('adds no expense for a current-schema bill flagged paid with nothing to link', () => {
+        // Such a bill never moved money, so inventing an expense now would
+        // silently debit the account for a payment that never happened.
+        const currentBlob = {
+            ...v1Blob,
+            schemaVersion: CURRENT_SCHEMA_VERSION,
+            accounts: [{ id: 'a1', name: 'Cash', type: 'cash', openingBalance: 1000 }],
+            incomes: [],
+            expenses: [],
+            transfers: [],
+            bills: [{ id: 'b1', description: 'Rent', amount: 200, dueDate: '2026-08-05', isPaid: true, categoryId: 'c1' }],
+        }
+        const migrated = migrate(currentBlob)
+
+        expect(migrated.expenses).toHaveLength(0)
+        expect(computeBalances(migrated)).toEqual({ a1: 1000 })
+    })
+
     it('throws rather than returning empty state for unusable input', () => {
         expect(() => migrate(null)).toThrow()
         expect(() => migrate({ nonsense: true })).toThrow()

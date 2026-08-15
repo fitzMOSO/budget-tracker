@@ -24,11 +24,12 @@ import {
     isOverdue,
     groupBillsByStatus,
 } from '../utils'
+import { linkedBillExpense } from '../utils/balances'
 import { showPaymentDialog, showSuccess, showDeleteConfirm, showConfirm } from '../utils/swal'
 import type { Bill, Account, Category } from '../types'
 
 export default function BillsPage() {
-    const { state, balanceOf, addBill, updateBill, deleteBill, payBill, unpayBill, addExpense, generateRecurringBills, isLoading } = useBudget()
+    const { state, balanceOf, addBill, updateBill, deleteBill, payBill, unpayBill, isBillPaid, generateRecurringBills, isLoading } = useBudget()
     const { month: currentMonth, year: currentYear } = getMonthYear()
     const [selectedMonth, setSelectedMonth] = useState(currentMonth)
     const [selectedYear, setSelectedYear] = useState(currentYear)
@@ -63,7 +64,7 @@ export default function BillsPage() {
         [state.bills, selectedMonth, selectedYear]
     )
 
-    const { paid, pending, overdue } = groupBillsByStatus(monthlyBills)
+    const { paid, pending, overdue } = groupBillsByStatus(monthlyBills, isBillPaid)
 
     const totalBills = monthlyBills.reduce((sum: number, b: Bill) => sum + b.amount, 0)
     const totalPaid = paid.reduce((sum: number, b: Bill) => sum + b.amount, 0)
@@ -116,14 +117,15 @@ export default function BillsPage() {
             description: formData.description,
             amount: parseFloat(formData.amount),
             dueDate: formData.dueDate,
-            isPaid: editingBill?.isPaid || false,
             isRecurring: formData.isRecurring,
             categoryId: formData.categoryId || undefined,
             notes: formData.notes || undefined,
         }
 
         if (editingBill) {
-            updateBill({ ...billData, id: editingBill.id, paidDate: editingBill.paidDate, paidFromAccountId: editingBill.paidFromAccountId })
+            // Payment details live on the linked expense, so there is nothing
+            // payment-related to carry over from the bill being edited.
+            updateBill({ ...billData, id: editingBill.id })
             showSuccess('Bill updated successfully!')
         } else {
             addBill(billData)
@@ -142,11 +144,11 @@ export default function BillsPage() {
     }
 
     const handlePayBill = async (bill: Bill) => {
-        if (bill.isPaid) {
-            // Unpay the bill
+        if (isBillPaid(bill.id)) {
+            // Unpay the bill by deleting the expense the payment created.
             const confirmed = await showConfirm(
                 'Mark as Unpaid?',
-                'This will reverse the payment and add the amount back to the account.',
+                'This deletes the expense this payment created, so the money it moved goes back to the account.',
                 'Yes, Unpay',
                 'Cancel'
             )
@@ -164,21 +166,9 @@ export default function BillsPage() {
                 state.settings.currencySymbol
             )
             if (result) {
-                payBill(bill.id, getTodayISO(), result.accountId)
-
-                // Also create an expense entry if the bill has a category
-                if (bill.categoryId) {
-                    addExpense({
-                        description: bill.description,
-                        amount: bill.amount,
-                        date: getTodayISO(),
-                        categoryId: bill.categoryId,
-                        accountId: result.accountId,
-                        expenseType: 'essential',
-                        notes: `Auto-created from bill payment`,
-                    })
-                }
-
+                // One path only: payBill creates the linked expense, which is
+                // the money movement. Uncategorised bills included.
+                payBill(bill, result.accountId)
                 showSuccess('Bill paid successfully!')
             }
         }
@@ -228,14 +218,18 @@ export default function BillsPage() {
     }
 
     const BillCard = ({ bill }: { bill: Bill }) => {
-        const overdue = isOverdue(bill.dueDate, bill.isPaid)
-        const paidFromAccount = bill.paidFromAccountId
-            ? state.accounts.find((a: Account) => a.id === bill.paidFromAccountId)
+        // Paid-ness, the paid date and the paying account all come from the
+        // linked expense — the bill itself stores none of them.
+        const paymentExpense = linkedBillExpense(state, bill.id)
+        const isPaid = paymentExpense !== undefined
+        const overdue = isOverdue(bill.dueDate, isPaid)
+        const paidFromAccount = paymentExpense?.accountId
+            ? state.accounts.find((a: Account) => a.id === paymentExpense.accountId)
             : null
 
         return (
             <div
-                className={`p-4 rounded-lg border ${bill.isPaid
+                className={`p-4 rounded-lg border ${isPaid
                     ? 'bg-green-50 border-green-200'
                     : overdue
                         ? 'bg-red-50 border-red-200'
@@ -271,9 +265,9 @@ export default function BillsPage() {
                         <p className="text-sm text-gray-500 mt-1">
                             Due: {formatDate(bill.dueDate)}
                         </p>
-                        {bill.isPaid && bill.paidDate && (
+                        {paymentExpense && (
                             <p className="text-sm text-green-600 mt-1">
-                                Paid on: {formatDate(bill.paidDate)}
+                                Paid on: {formatDate(paymentExpense.date)}
                                 {paidFromAccount && ` from ${paidFromAccount.name}`}
                             </p>
                         )}
@@ -282,7 +276,7 @@ export default function BillsPage() {
                         <p className="font-bold text-gray-900">
                             {formatCurrency(bill.amount, state.settings)}
                         </p>
-                        {bill.isPaid ? (
+                        {isPaid ? (
                             <Badge variant="success" className="mt-1">
                                 <CheckCircle className="w-3 h-3 mr-1" />
                                 Paid
@@ -306,7 +300,7 @@ export default function BillsPage() {
                         size="sm"
                         onClick={() => handlePayBill(bill)}
                     >
-                        {bill.isPaid ? 'Mark Unpaid' : 'Pay Now'}
+                        {isPaid ? 'Mark Unpaid' : 'Pay Now'}
                     </Button>
                     <Button variant="ghost" size="sm" onClick={() => handleOpenModal(bill)}>
                         Edit

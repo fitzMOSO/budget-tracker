@@ -49,8 +49,25 @@ describe('buildDemoData', () => {
         }
         for (const bill of demo.bills ?? []) {
             if (bill.categoryId) expect(categoryIds).toContain(bill.categoryId)
-            if (bill.paidFromAccountId) expect(accountIds).toContain(bill.paidFromAccountId)
         }
+    })
+
+    it('links every bill-linked expense to a bill it also defines', () => {
+        // A dangling billId would render as an unpaid bill whose money already
+        // left the account.
+        const billIds = new Set((demo.bills ?? []).map((b) => b.id))
+        for (const expense of demo.expenses ?? []) {
+            if (expense.billId) expect(billIds).toContain(expense.billId)
+        }
+    })
+
+    it('shows at least one paid and one unpaid bill', () => {
+        // "Paid" is derived from the link, so the demo needs both shapes present
+        // or the bills page renders one empty column.
+        const linked = new Set((demo.expenses ?? []).map((e) => e.billId).filter(Boolean))
+        const bills = demo.bills ?? []
+        expect(bills.some((b) => linked.has(b.id))).toBe(true)
+        expect(bills.some((b) => !linked.has(b.id))).toBe(true)
     })
 
     it('links statements and contributions to their parents', () => {

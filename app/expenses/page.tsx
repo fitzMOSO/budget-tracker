@@ -34,7 +34,7 @@ const EXPENSE_TYPES = [
 ]
 
 export default function ExpensesPage() {
-    const { state, balanceOf, addExpense, updateExpense, deleteExpense, addBill, payBill, isLoading } = useBudget()
+    const { state, balanceOf, addExpense, updateExpense, deleteExpense, addBill, isLoading } = useBudget()
     const { month: currentMonth, year: currentYear } = getMonthYear()
     const [selectedMonth, setSelectedMonth] = useState(currentMonth)
     const [selectedYear, setSelectedYear] = useState(currentYear)
@@ -137,25 +137,23 @@ export default function ExpensesPage() {
             updateExpense({ ...expenseData, id: editingExpense.id })
             showSuccess('Expense updated successfully!')
         } else {
-            addExpense(expenseData)
-
-            // Check if category is marked as a bill category - if so, also create a paid bill
+            // Check if category is marked as a bill category - if so, also record a bill
             const selectedCategory = state.categories.find((c: Category) => c.id === formData.categoryId)
             if (selectedCategory?.isBill) {
-                // Create a bill that's already marked as paid with expense tracking
-                addBill({
+                // The bill shows as paid because THIS expense is linked to it —
+                // no second expense and no stored isPaid flag are involved.
+                const billId = addBill({
                     description: formData.description,
                     amount: parseFloat(formData.amount),
                     dueDate: formData.date,
-                    isPaid: true,
-                    paidDate: formData.date,
-                    paidFromAccountId: formData.accountId,
                     isRecurring: false,
                     categoryId: formData.categoryId,
                     notes: `Auto-created from expense`,
                 })
+                addExpense({ ...expenseData, billId })
                 showSuccess('Expense added and bill recorded!')
             } else {
+                addExpense(expenseData)
                 showSuccess('Expense added successfully!')
             }
         }

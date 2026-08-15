@@ -146,16 +146,23 @@ export function calculateCreditCardBalance(statement: CreditCardStatement): numb
   return statement.statementBalance - statement.amountPaid;
 }
 
-export function groupBillsByStatus(bills: Bill[]): {
+/**
+ * `isPaid` is passed in because a bill no longer stores it — it is derived from
+ * whether a linked expense exists (see `utils/balances.ts#isPaidBill`).
+ */
+export function groupBillsByStatus(
+  bills: Bill[],
+  isPaid: (billId: string) => boolean
+): {
   paid: Bill[];
   pending: Bill[];
   overdue: Bill[];
 } {
   const today = new Date();
   return {
-    paid: bills.filter((b) => b.isPaid),
-    pending: bills.filter((b) => !b.isPaid && parseISO(b.dueDate) >= today),
-    overdue: bills.filter((b) => !b.isPaid && parseISO(b.dueDate) < today),
+    paid: bills.filter((b) => isPaid(b.id)),
+    pending: bills.filter((b) => !isPaid(b.id) && parseISO(b.dueDate) >= today),
+    overdue: bills.filter((b) => !isPaid(b.id) && parseISO(b.dueDate) < today),
   };
 }
 

@@ -9,15 +9,22 @@ import type { Bill, AppSettings, Account } from '../../types'
 interface UpcomingBillsProps {
     bills: Bill[]
     settings: AppSettings
-    accounts?: Account[]
-    /** Derived balances by account id; account.openingBalance is NOT the live balance. */
-    balances?: Record<string, number>
-    onPayBill?: (id: string, paidDate: string, accountId: string) => void
+    accounts: Account[]
+    /**
+     * Derived balances by account id; account.openingBalance is NOT the live
+     * balance. Required alongside `accounts`: defaulting it to {} rendered every
+     * balance as 0 whenever a caller forgot to pass it.
+     */
+    balances: Record<string, number>
+    /** Derived: a bill is paid exactly when a linked expense exists. */
+    isBillPaid: (billId: string) => boolean
+    /** Must be the context's payBill, so the dashboard and the bills page agree. */
+    onPayBill?: (bill: Bill, accountId: string) => void
 }
 
-export function UpcomingBills({ bills, settings, accounts = [], balances = {}, onPayBill }: UpcomingBillsProps) {
+export function UpcomingBills({ bills, settings, accounts, balances, isBillPaid, onPayBill }: UpcomingBillsProps) {
     const sortedBills = [...bills]
-        .filter((b) => !b.isPaid)
+        .filter((b) => !isBillPaid(b.id))
         .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
         .slice(0, 5)
 
@@ -32,8 +39,9 @@ export function UpcomingBills({ bills, settings, accounts = [], balances = {}, o
         )
 
         if (result) {
-            const today = new Date().toISOString().split('T')[0]
-            onPayBill(bill.id, today, result.accountId)
+            // Same single path as the bills page: this creates the linked
+            // expense, which is what actually moves the money.
+            onPayBill(bill, result.accountId)
             showSuccess(`${bill.description} has been paid!`)
         }
     }
@@ -49,7 +57,8 @@ export function UpcomingBills({ bills, settings, accounts = [], balances = {}, o
                 ) : (
                     <div className="space-y-3">
                         {sortedBills.map((bill) => {
-                            const overdue = isOverdue(bill.dueDate, bill.isPaid)
+                            // sortedBills only holds unpaid bills.
+                            const overdue = isOverdue(bill.dueDate, false)
                             return (
                                 <div
                                     key={bill.id}

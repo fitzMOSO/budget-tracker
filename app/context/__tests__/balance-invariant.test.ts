@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { budgetReducer, seedState } from '../BudgetContext'
-import { computeBalances } from '../../utils/balances'
+import { computeBalances, isPaidBill } from '../../utils/balances'
+import { buildBillExpense } from '../../utils/bill-payment'
 import type { AppState } from '../../types'
 
 function base(): AppState {
@@ -43,17 +44,20 @@ describe('balance invariant', () => {
         expect(s.accounts[0].openingBalance).toBe(1000)
     })
 
-    it('paying and unpaying a bill never moves an account balance', () => {
+    it('paying and unpaying a bill moves money only through the linked expense', () => {
         let s = base()
-        s = budgetReducer(s, { type: 'ADD_BILL', payload: { id: 'b1', description: 'Rent', amount: 300, dueDate: '2026-08-05', isPaid: false } })
-        s = budgetReducer(s, { type: 'PAY_BILL', payload: { id: 'b1', paidDate: '2026-08-05', accountId: 'a1' } })
-        expect(computeBalances(s).a1).toBe(1000)
-        expect(s.bills[0].isPaid).toBe(true)
+        s = budgetReducer(s, { type: 'ADD_BILL', payload: { id: 'b1', description: 'Rent', amount: 300, dueDate: '2026-08-05' } })
+        const payment = { billId: 'b1', expense: buildBillExpense(s.bills[0], 'a1', { id: 'e1', date: '2026-08-05' }) }
+
+        s = budgetReducer(s, { type: 'PAY_BILL', payload: payment })
+        // The bill itself never moves money; the expense it created does.
+        expect(computeBalances(s).a1).toBe(700)
+        expect(isPaidBill(s, 'b1')).toBe(true)
 
         s = budgetReducer(s, { type: 'UNPAY_BILL', payload: 'b1' })
         expect(computeBalances(s).a1).toBe(1000)
 
-        s = budgetReducer(s, { type: 'PAY_BILL', payload: { id: 'b1', paidDate: '2026-08-05', accountId: 'a1' } })
+        s = budgetReducer(s, { type: 'PAY_BILL', payload: payment })
         s = budgetReducer(s, { type: 'DELETE_BILL', payload: 'b1' })
         expect(computeBalances(s).a1).toBe(1000)
         expect(s.accounts[0].openingBalance).toBe(1000)

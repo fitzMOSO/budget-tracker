@@ -134,10 +134,11 @@ export default function AccountsPage() {
         // Check if account is used in any transactions
         const incomeUsingAccount = state.incomes.filter(i => i.accountId === account.id).length
         const expenseUsingAccount = state.expenses.filter(e => e.accountId === account.id).length
-        const billsUsingAccount = state.bills.filter(b => b.paidFromAccountId === account.id).length
+        // Bills no longer reference an account: a paid bill's account lives on its
+        // linked expense, already counted by expenseUsingAccount.
         const contributionsUsingAccount = state.savingsContributions.filter(c => c.fromAccountId === account.id).length
 
-        const totalUsage = incomeUsingAccount + expenseUsingAccount + billsUsingAccount + contributionsUsingAccount
+        const totalUsage = incomeUsingAccount + expenseUsingAccount + contributionsUsingAccount
 
         if (totalUsage > 0) {
             showError(`Cannot delete this account. It is used in ${totalUsage} transaction(s).`)

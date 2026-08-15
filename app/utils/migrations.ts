@@ -9,7 +9,7 @@
 //    would be wrong by the sum of all paid bills.
 // 2. Purity: migrate() never touches localStorage. The caller (BudgetContext)
 //    owns all I/O, including the pre-migration backup.
-import type { AppState, Category, Account, Expense } from '../types'
+import type { AppState, Category, Account, Bill, Expense } from '../types'
 import {
     DEFAULT_INCOME_CATEGORIES,
     DEFAULT_EXPENSE_CATEGORIES,
@@ -36,11 +36,10 @@ type LegacyAccount = {
 }
 
 /**
- * Pre-Task-6 bill shape. Bill.paidFromAccountId still exists on the live
- * Bill interface as of this task, but Task 6 removes it — typing migration
- * input against a type that is about to change guarantees this file breaks
- * the day that happens. Migration input is the OLD shape by definition, so
- * it gets its own local type, independent of whatever Bill looks like now.
+ * Pre-Task-6 bill shape: isPaid, paidDate and paidFromAccountId were stored on
+ * the bill. They are all derived from the linked expense now and no longer exist
+ * on the live Bill interface. Migration input is the OLD shape by definition, so
+ * it gets its own local type, independent of whatever Bill looks like today.
  */
 type LegacyBill = {
     id: string
@@ -93,8 +92,29 @@ function seedDefaultCategories(): Category[] {
     ]
 }
 
-/** Backfills paid bills into linked expenses. Pure — returns a new array. */
-function backfillBillExpenses(bills: LegacyBill[], expenses: Expense[]): Expense[] {
+/** Drops the stored payment fields; "paid" is derived from the linked expense. */
+function toBill(bill: LegacyBill): Bill {
+    return {
+        id: bill.id,
+        description: bill.description,
+        amount: bill.amount,
+        dueDate: bill.dueDate,
+        isRecurring: bill.isRecurring,
+        recurringSourceId: bill.recurringSourceId,
+        categoryId: bill.categoryId,
+        notes: bill.notes,
+    }
+}
+
+/**
+ * Backfills paid bills into linked expenses. Pure — returns a new array.
+ *
+ * `linkOnly` exists for blobs already on the current schema: those bills'
+ * payments were recorded as expenses at the time, so attaching billId preserves
+ * their paid status, while ADDING an expense would debit the account for money
+ * that already left it.
+ */
+function backfillBillExpenses(bills: LegacyBill[], expenses: Expense[], linkOnly = false): Expense[] {
     let result = expenses
     const additions: Expense[] = []
 
@@ -114,6 +134,8 @@ function backfillBillExpenses(bills: LegacyBill[], expenses: Expense[]): Expense
             result = result.map((e, i) => (i === matchIndex ? { ...e, billId: bill.id } : e))
             continue
         }
+
+        if (linkOnly) continue
 
         additions.push({
             id: `mig-${bill.id}`,
@@ -140,14 +162,14 @@ export function migrate(raw: unknown): AppState {
     }
 
     const legacyAccounts = raw.accounts as LegacyAccount[] | undefined
-    const legacyBills = (raw.bills as LegacyBill[] | undefined) ?? []
+    const legacyBills = Array.isArray(raw.bills) ? (raw.bills as LegacyBill[]) : []
 
     const state: AppState = {
         categories: Array.isArray(raw.categories) ? (raw.categories as Category[]) : seedDefaultCategories(),
         accounts: [], // filled in below, after opening balances (or straight passthrough) are known
         incomes: (raw.incomes as AppState['incomes']) ?? [],
         expenses: (raw.expenses as AppState['expenses']) ?? [],
-        bills: (raw.bills as AppState['bills']) ?? [],
+        bills: legacyBills.map(toBill),
         creditCards: (raw.creditCards as AppState['creditCards']) ?? [],
         creditCardStatements: (raw.creditCardStatements as AppState['creditCardStatements']) ?? [],
         savingsGoals: (raw.savingsGoals as AppState['savingsGoals']) ?? [],
@@ -163,6 +185,11 @@ export function migrate(raw: unknown): AppState {
     // regardless of schema version) but must otherwise pass through unchanged
     // to keep migrate() idempotent.
     if (raw.schemaVersion === CURRENT_SCHEMA_VERSION) {
+        // Bills on this schema may still carry the old isPaid flag (toBill above
+        // stripped it). Re-attach the link to the expense that payment already
+        // created so the bill keeps reading as paid; never add a new expense
+        // here, which would debit money that has already moved.
+        state.expenses = backfillBillExpenses(legacyBills, state.expenses, true)
         state.accounts = Array.isArray(legacyAccounts) && legacyAccounts.length > 0
             ? (legacyAccounts as unknown as Account[])
             : seedDefaultAccounts()

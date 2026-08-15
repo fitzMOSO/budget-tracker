@@ -57,14 +57,17 @@ export interface Expense {
 
 export type ExpenseType = 'essential' | 'non-essential' | 'savings';
 
+/**
+ * A bill is a scheduled obligation, never a movement of money. Whether it is
+ * paid, when it was paid and which account paid it are all DERIVED from the
+ * linked expense (`Expense.billId`) — see `utils/balances.ts#isPaidBill`.
+ * Storing them here as well would be a second source of truth for one fact.
+ */
 export interface Bill {
   id: string;
   description: string;
   amount: number;
   dueDate: string;
-  isPaid: boolean;
-  paidDate?: string;
-  paidFromAccountId?: string; // Which account the bill was paid from
   isRecurring?: boolean;
   recurringSourceId?: string; // ID of the original recurring bill this was generated from
   categoryId?: string;

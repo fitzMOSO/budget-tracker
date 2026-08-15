@@ -28,6 +28,7 @@ import {
 } from '../types'
 import { migrate, CURRENT_SCHEMA_VERSION, V1_BACKUP_KEY } from '../utils/migrations'
 import { computeBalances } from '../utils/balances'
+import { buildBillExpense } from '../utils/bill-payment'
 
 const STORAGE_KEY = 'budget-tracker-data'
 
@@ -73,7 +74,7 @@ type Action =
     | { type: 'ADD_BILL'; payload: Bill }
     | { type: 'UPDATE_BILL'; payload: Bill }
     | { type: 'DELETE_BILL'; payload: string }
-    | { type: 'PAY_BILL'; payload: { id: string; paidDate: string; accountId: string } }
+    | { type: 'PAY_BILL'; payload: { billId: string; expense: Expense } }
     | { type: 'UNPAY_BILL'; payload: string }
     | { type: 'GENERATE_RECURRING_BILLS'; payload: { month: number; year: number } }
     // Credit Cards
@@ -209,9 +210,7 @@ export function budgetReducer(state: AppState, action: Action): AppState {
                 const currentMonth = today.getMonth()
                 const currentYear = today.getFullYear()
 
-                return {
-                    ...state,
-                    bills: state.bills
+                const keptBills = state.bills
                         .filter((b) => {
                             // Keep bills that are NOT generated from this source
                             if (b.recurringSourceId !== updatedBill.id) return true
@@ -228,7 +227,19 @@ export function budgetReducer(state: AppState, action: Action): AppState {
                             // Delete future bills
                             return false
                         })
-                        .map((b) => (b.id === updatedBill.id ? updatedBill : b)), // Update the source bill
+                        .map((b) => (b.id === updatedBill.id ? updatedBill : b)) // Update the source bill
+
+                // Dropped bills take their linked expenses with them. Only the
+                // bills removed HERE count — an expense linked to a bill that was
+                // already missing is left alone rather than silently deleted.
+                const keptBillIds = new Set(keptBills.map((b) => b.id))
+                const removedBillIds = new Set(
+                    state.bills.filter((b) => !keptBillIds.has(b.id)).map((b) => b.id),
+                )
+                return {
+                    ...state,
+                    bills: keptBills,
+                    expenses: state.expenses.filter((e) => !e.billId || !removedBillIds.has(e.billId)),
                 }
             }
 
@@ -241,30 +252,30 @@ export function budgetReducer(state: AppState, action: Action): AppState {
         }
 
         case 'DELETE_BILL':
-            // No refund: the money movement lives on the linked expense, not the bill.
+            // The bill's payment is its linked expense, so deleting the bill
+            // deletes the movement with it. The bill itself never held money.
             return {
                 ...state,
                 bills: state.bills.filter((b) => b.id !== action.payload),
+                expenses: state.expenses.filter((e) => e.billId !== action.payload),
             }
 
-        case 'PAY_BILL':
-            return {
-                ...state,
-                bills: state.bills.map((b) =>
-                    b.id === action.payload.id
-                        ? { ...b, isPaid: true, paidDate: action.payload.paidDate, paidFromAccountId: action.payload.accountId }
-                        : b
-                ),
-            }
+        case 'PAY_BILL': {
+            // Paying a bill IS creating the expense — the bill is not touched,
+            // because "paid" is derived from the link, not stored on the bill.
+            const { billId, expense } = action.payload
+            // An already-paid bill re-paid (double click, two open tabs) would
+            // otherwise debit the account twice.
+            if (state.expenses.some((e) => e.billId === billId)) return state
+            return { ...state, expenses: [...state.expenses, { ...expense, billId }] }
+        }
 
         case 'UNPAY_BILL':
+            // Deleting the linked expense reverses the payment exactly, for the
+            // amount actually paid — editing the bill afterwards cannot inflate it.
             return {
                 ...state,
-                bills: state.bills.map((b) =>
-                    b.id === action.payload
-                        ? { ...b, isPaid: false, paidDate: undefined, paidFromAccountId: undefined }
-                        : b
-                ),
+                expenses: state.expenses.filter((e) => e.billId !== action.payload),
             }
 
         case 'GENERATE_RECURRING_BILLS': {
@@ -345,7 +356,6 @@ export function budgetReducer(state: AppState, action: Action): AppState {
                             description: bill.description,
                             amount: bill.amount,
                             dueDate: targetDateISO,
-                            isPaid: false,
                             isRecurring: false, // Generated bills are NOT recurring sources
                             recurringSourceId: bill.id,
                             categoryId: bill.categoryId,
@@ -558,11 +568,15 @@ type BudgetContextType = {
     updateExpense: (expense: Expense) => void
     deleteExpense: (id: string) => void
     // Bills
-    addBill: (bill: Omit<Bill, 'id'>) => void
+    /** Returns the new bill's id, so a caller can link an expense to it. */
+    addBill: (bill: Omit<Bill, 'id'>) => string
     updateBill: (bill: Bill) => void
     deleteBill: (id: string) => void
-    payBill: (id: string, paidDate: string, accountId: string) => void
+    /** The one and only way to pay a bill: it creates the linked expense. */
+    payBill: (bill: Bill, accountId: string) => void
     unpayBill: (id: string) => void
+    /** Derived: a bill is paid exactly when a linked expense exists. */
+    isBillPaid: (billId: string) => boolean
     generateRecurringBills: (month: number, year: number) => void
     // Credit Cards
     addCreditCard: (card: Omit<CreditCard, 'id'>) => void
@@ -708,7 +722,9 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
     // Bill functions
     const addBill = useCallback((bill: Omit<Bill, 'id'>) => {
-        dispatch({ type: 'ADD_BILL', payload: { ...bill, id: uuidv4() } })
+        const id = uuidv4()
+        dispatch({ type: 'ADD_BILL', payload: { ...bill, id } })
+        return id
     }, [])
 
     const updateBill = useCallback((bill: Bill) => {
@@ -719,13 +735,21 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         dispatch({ type: 'DELETE_BILL', payload: id })
     }, [])
 
-    const payBill = useCallback((id: string, paidDate: string, accountId: string) => {
-        dispatch({ type: 'PAY_BILL', payload: { id, paidDate, accountId } })
+    // The single payment path. Every UI that pays a bill goes through here, so
+    // the bills page and the dashboard cannot produce different results.
+    const payBill = useCallback((bill: Bill, accountId: string) => {
+        dispatch({ type: 'PAY_BILL', payload: { billId: bill.id, expense: buildBillExpense(bill, accountId) } })
     }, [])
 
     const unpayBill = useCallback((id: string) => {
         dispatch({ type: 'UNPAY_BILL', payload: id })
     }, [])
+
+    const paidBillIds = useMemo(
+        () => new Set(state.expenses.map((e) => e.billId).filter(Boolean) as string[]),
+        [state.expenses],
+    )
+    const isBillPaid = useCallback((billId: string) => paidBillIds.has(billId), [paidBillIds])
 
     const generateRecurringBills = useCallback((month: number, year: number) => {
         dispatch({ type: 'GENERATE_RECURRING_BILLS', payload: { month, year } })
@@ -826,6 +850,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         deleteBill,
         payBill,
         unpayBill,
+        isBillPaid,
         generateRecurringBills,
         addCreditCard,
         updateCreditCard,
