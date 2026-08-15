@@ -52,6 +52,7 @@ export interface Expense {
   accountId?: string; // Which account the expense was deducted from
   expenseType: ExpenseType;
   notes?: string;
+  billId?: string; // Set when this expense represents a paid bill (migration backfill or bill payment)
 }
 
 export type ExpenseType = 'essential' | 'non-essential' | 'savings';

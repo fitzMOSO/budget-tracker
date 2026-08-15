@@ -26,6 +26,7 @@ import {
     DEFAULT_SETTINGS as defaultSettings,
     DEFAULT_ACCOUNTS as defaultAccounts,
 } from '../types'
+import { migrate, CURRENT_SCHEMA_VERSION, V1_BACKUP_KEY } from '../utils/migrations'
 
 const STORAGE_KEY = 'budget-tracker-data'
 
@@ -42,7 +43,7 @@ const initialState: AppState = {
     savingsContributions: [],
     monthlyBudgets: [],
     transfers: [],
-    schemaVersion: 2,
+    schemaVersion: CURRENT_SCHEMA_VERSION,
     settings: defaultSettings,
 }
 
@@ -918,13 +919,16 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
             const stored = localStorage.getItem(STORAGE_KEY)
             console.log('Loading from localStorage:', stored ? 'Data found' : 'No data found')
             if (stored) {
-                const parsedState = JSON.parse(stored) as AppState
-                // Ensure accounts array exists (migration for existing users)
-                if (!parsedState.accounts) {
-                    parsedState.accounts = defaultAccounts.map(a => ({ ...a, id: uuidv4() }))
+                const parsed = JSON.parse(stored)
+                if (parsed?.schemaVersion !== CURRENT_SCHEMA_VERSION) {
+                    // One-time, never overwritten: the escape hatch if migration is wrong.
+                    if (!localStorage.getItem(V1_BACKUP_KEY)) {
+                        localStorage.setItem(V1_BACKUP_KEY, stored)
+                    }
                 }
-                dispatch({ type: 'LOAD_STATE', payload: parsedState })
-                console.log('Loaded state with', parsedState.incomes?.length || 0, 'incomes')
+                const migratedState = migrate(parsed)
+                dispatch({ type: 'LOAD_STATE', payload: migratedState })
+                console.log('Loaded state with', migratedState.incomes?.length || 0, 'incomes')
             } else {
                 // Initialize with default categories and accounts
                 dispatch({ type: 'LOAD_STATE', payload: seedState() })
