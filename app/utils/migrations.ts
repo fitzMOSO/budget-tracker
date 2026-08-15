@@ -14,6 +14,7 @@ import {
     DEFAULT_INCOME_CATEGORIES,
     DEFAULT_EXPENSE_CATEGORIES,
     DEFAULT_ACCOUNTS,
+    DEFAULT_SETTINGS,
 } from '../types'
 import { allEffects } from './balances'
 import { v4 as uuidv4 } from 'uuid'
@@ -102,7 +103,8 @@ function backfillBillExpenses(bills: LegacyBill[], expenses: Expense[]): Expense
 
         const matchIndex = result.findIndex((e) =>
             e.billId === bill.id ||
-            (e.amount === bill.amount &&
+            (!e.billId &&
+                e.amount === bill.amount &&
                 e.accountId === bill.paidFromAccountId &&
                 e.date === (bill.paidDate ?? bill.dueDate) &&
                 e.notes === 'Auto-created from bill payment'),
@@ -153,7 +155,7 @@ export function migrate(raw: unknown): AppState {
         monthlyBudgets: (raw.monthlyBudgets as AppState['monthlyBudgets']) ?? [],
         transfers: (raw.transfers as AppState['transfers']) ?? [],
         schemaVersion: CURRENT_SCHEMA_VERSION,
-        settings: raw.settings as AppState['settings'],
+        settings: (raw.settings as AppState['settings'] | undefined) ?? DEFAULT_SETTINGS,
     }
 
     // Already-migrated data still needs the "missing accounts" repair (the

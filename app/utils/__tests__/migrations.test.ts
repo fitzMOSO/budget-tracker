@@ -78,4 +78,41 @@ describe('migrate v1 -> v2', () => {
         const migrated = migrate(withoutCategories as unknown)
         expect(migrated.categories.length).toBeGreaterThan(0)
     })
+
+    it('repairs a blob that is recognisably this app\'s data but missing settings', () => {
+        const { settings, ...withoutSettings } = v1Blob
+        const migrated = migrate(withoutSettings as unknown)
+        expect(migrated.settings).toBeDefined()
+        expect(migrated.settings.currencySymbol).toBeDefined()
+    })
+
+    it('links each of two identical paid bills to a distinct expense, never overwriting an already-claimed one', () => {
+        // Same recurring bill settled twice in one sitting: same amount, same
+        // account, same paid date -> the heuristic match is ambiguous between
+        // the two auto-created expenses unless already-linked ones are excluded.
+        const withDuplicateBills = {
+            ...v1Blob,
+            accounts: [{ id: 'a1', name: 'Cash', type: 'cash', balance: 5000 }],
+            bills: [
+                { id: 'b1', description: 'Rent', amount: 2840, dueDate: '2026-07-05', isPaid: true, paidDate: '2026-08-05', paidFromAccountId: 'a1', categoryId: 'c1' },
+                { id: 'b2', description: 'Rent', amount: 2840, dueDate: '2026-08-05', isPaid: true, paidDate: '2026-08-05', paidFromAccountId: 'a1', categoryId: 'c1' },
+            ],
+            expenses: [
+                { id: 'e9', description: 'Rent', amount: 2840, date: '2026-08-05', categoryId: 'c1', accountId: 'a1', expenseType: 'essential', notes: 'Auto-created from bill payment' },
+                { id: 'e10', description: 'Rent', amount: 2840, date: '2026-08-05', categoryId: 'c1', accountId: 'a1', expenseType: 'essential', notes: 'Auto-created from bill payment' },
+            ],
+        }
+
+        const migrated = migrate(withDuplicateBills)
+
+        const linkedToB1 = migrated.expenses.filter((e) => e.billId === 'b1')
+        const linkedToB2 = migrated.expenses.filter((e) => e.billId === 'b2')
+        expect(linkedToB1).toHaveLength(1)
+        expect(linkedToB2).toHaveLength(1)
+        expect(linkedToB1[0].id).not.toBe(linkedToB2[0].id)
+        // Both original expenses got claimed — neither was left unlinked, and
+        // no synthetic third expense was created for the "duplicate" bill.
+        expect(migrated.expenses.filter((e) => e.id === 'e9' || e.id === 'e10')).toHaveLength(2)
+        expect(migrated.expenses.filter((e) => e.id.startsWith('mig-'))).toHaveLength(0)
+    })
 })
