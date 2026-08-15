@@ -17,14 +17,6 @@
 /.next/
 /out/
 
-# Capacitor / native projects
-android/
-ios/
-
-# Capacitor generated files
-capacitor.config.json
-capacitor.config.ts
-
 # Editor/IDE
 .vscode/
 
