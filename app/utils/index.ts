@@ -147,6 +147,24 @@ export function calculateCreditCardBalance(statement: CreditCardStatement): numb
 }
 
 /**
+ * The one definition of "this is a payment amount", shared by every screen that
+ * records one. The credit-card page and the dashboard summary each carried their
+ * own near-miss version; duplicated guards drifting apart is the bug class the
+ * derived-balance refactor exists to remove.
+ *
+ * `Number.isFinite` is load-bearing, not defensive noise: callers pass
+ * `parseFloat(<text input>)`, an empty field yields `NaN`, and `NaN <= 0` is
+ * false — so a bare `amount <= 0` check lets NaN through into `amountPaid`,
+ * where it becomes a NaN debit on the paying account's derived balance.
+ */
+export function isValidPayment(n: number): boolean {
+  return Number.isFinite(n) && n > 0;
+}
+
+/** The single wording for a rejected payment amount, so both screens agree. */
+export const INVALID_PAYMENT_MESSAGE = 'Enter a payment amount greater than zero.';
+
+/**
  * `isPaid` is passed in because a bill no longer stores it — it is derived from
  * whether a linked expense exists (see `utils/balances.ts#isPaidBill`).
  */

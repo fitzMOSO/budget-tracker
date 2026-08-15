@@ -24,6 +24,8 @@ import {
     getMonthYear,
     getTodayISO,
     calculateCreditCardBalance,
+    isValidPayment,
+    INVALID_PAYMENT_MESSAGE,
 } from '../utils'
 import { showSuccess, showDeleteConfirm, showError } from '../utils/swal'
 import type { CreditCard, CreditCardStatement, PaymentStatus, Account } from '../types'
@@ -306,8 +308,8 @@ export default function CreditCardsPage() {
         if (!paymentStatement) return
 
         const additionalPayment = parseFloat(paymentAmount)
-        if (!Number.isFinite(additionalPayment) || additionalPayment <= 0) {
-            showError('Enter a payment amount greater than zero.')
+        if (!isValidPayment(additionalPayment)) {
+            showError(INVALID_PAYMENT_MESSAGE)
             return
         }
 
