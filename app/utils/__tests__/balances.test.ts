@@ -67,4 +67,19 @@ describe('computeBalances', () => {
 
         expect(computeBalances(state)).toEqual({ a1: 100 })
     })
+
+    it('does not let prototype-chain keys leak through as phantom accounts', () => {
+        const state = emptyState()
+        state.accounts = [{ id: 'a1', name: 'Cash', type: 'cash', openingBalance: 100 }]
+        state.expenses = [
+            { id: 'e1', description: 'Ghost', amount: 50, date: '2026-08-01', categoryId: 'c1', accountId: 'constructor', expenseType: 'essential' },
+            { id: 'e2', description: 'Ghost2', amount: 25, date: '2026-08-01', categoryId: 'c1', accountId: '__proto__', expenseType: 'essential' },
+            { id: 'e3', description: 'Ghost3', amount: 25, date: '2026-08-01', categoryId: 'c1', accountId: 'toString', expenseType: 'essential' },
+        ]
+
+        const result = computeBalances(state)
+        expect(result).toEqual({ a1: 100 })
+        expect(Object.keys(result)).toEqual(['a1'])
+        expect(Number.isNaN(result.a1)).toBe(false)
+    })
 })

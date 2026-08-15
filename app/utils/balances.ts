@@ -54,14 +54,17 @@ export function allEffects(state: AppState): BalanceEffect[] {
 }
 
 export function computeBalances(state: AppState): Record<string, number> {
-    const balances: Record<string, number> = {}
-    for (const account of state.accounts) balances[account.id] = account.openingBalance
+    // A Map has no prototype chain, so account ids that collide with Object.prototype
+    // keys (e.g. 'constructor', '__proto__', 'toString') can't be mistaken for real accounts.
+    const balances = new Map<string, number>()
+    for (const account of state.accounts) balances.set(account.id, account.openingBalance)
 
     for (const effect of allEffects(state)) {
         // Orphaned references contribute nothing rather than resurrecting an account.
-        if (effect.accountId in balances) balances[effect.accountId] += effect.delta
+        const current = balances.get(effect.accountId)
+        if (current !== undefined) balances.set(effect.accountId, current + effect.delta)
     }
-    return balances
+    return Object.fromEntries(balances)
 }
 
 export function balanceOf(state: AppState, accountId: string): number {
