@@ -50,7 +50,7 @@ const getAccountIcon = (type: Account['type']) => {
 }
 
 export default function AccountsPage() {
-    const { state, balances, balanceOf, addAccount, updateAccount, deleteAccount, isLoading } = useBudget()
+    const { state, balances, balanceOf, addAccount, updateAccount, deleteAccount, canDeleteAccount, isLoading } = useBudget()
     const { month: currentMonth, year: currentYear } = getMonthYear()
     const [selectedMonth, setSelectedMonth] = useState(currentMonth)
     const [selectedYear, setSelectedYear] = useState(currentYear)
@@ -131,25 +131,25 @@ export default function AccountsPage() {
     }
 
     const handleDelete = async (account: Account) => {
-        // Check if account is used in any transactions
-        const incomeUsingAccount = state.incomes.filter(i => i.accountId === account.id).length
-        const expenseUsingAccount = state.expenses.filter(e => e.accountId === account.id).length
-        // Bills no longer reference an account: a paid bill's account lives on its
-        // linked expense, already counted by expenseUsingAccount.
-        const contributionsUsingAccount = state.savingsContributions.filter(c => c.fromAccountId === account.id).length
-
-        const totalUsage = incomeUsingAccount + expenseUsingAccount + contributionsUsingAccount
-
-        if (totalUsage > 0) {
-            showError(`Cannot delete this account. It is used in ${totalUsage} transaction(s).`)
+        // One definition of "in use", shared with the reducer — the page used to
+        // keep its own count that ignored transfers, so the reducer could refuse
+        // a delete this page had already called safe.
+        const check = canDeleteAccount(account.id)
+        if (!check.allowed) {
+            showError(check.reason)
             return
         }
 
         const confirmed = await showDeleteConfirm(account.name)
-        if (confirmed) {
-            deleteAccount(account.id)
-            showSuccess('Account deleted successfully!')
+        if (!confirmed) return
+
+        // Re-checked inside the context against the state at dispatch time.
+        const result = deleteAccount(account.id)
+        if (!result.allowed) {
+            showError(result.reason)
+            return
         }
+        showSuccess('Account deleted successfully!')
     }
 
     if (isLoading) {

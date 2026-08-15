@@ -29,6 +29,7 @@ import {
 import { migrate, relinkImportedBills, CURRENT_SCHEMA_VERSION, V1_BACKUP_KEY } from '../utils/migrations'
 import { computeBalances } from '../utils/balances'
 import { buildBillExpense } from '../utils/bill-payment'
+import { checkDelete, cascadeDelete, type DeleteCheck } from '../utils/integrity'
 
 const STORAGE_KEY = 'budget-tracker-data'
 
@@ -133,10 +134,13 @@ export function budgetReducer(state: AppState, action: Action): AppState {
             }
 
         case 'DELETE_CATEGORY':
-            return {
-                ...state,
-                categories: state.categories.filter((c) => c.id !== action.payload),
-            }
+            // Blocked, not reassigned: there is no real "Uncategorized" record,
+            // only a display fallback. The context's deleteCategory runs the same
+            // check first and hands the caller the reason, so a UI that reaches
+            // here anyway (or a future caller) still cannot orphan a categoryId.
+            return checkDelete(state, 'category', action.payload).allowed
+                ? { ...state, categories: state.categories.filter((c) => c.id !== action.payload) }
+                : state
 
         // Accounts
         case 'ADD_ACCOUNT':
@@ -152,10 +156,9 @@ export function budgetReducer(state: AppState, action: Action): AppState {
             }
 
         case 'DELETE_ACCOUNT':
-            return {
-                ...state,
-                accounts: state.accounts.filter((a) => a.id !== action.payload),
-            }
+            return checkDelete(state, 'account', action.payload).allowed
+                ? { ...state, accounts: state.accounts.filter((a) => a.id !== action.payload) }
+                : state
 
         case 'TRANSFER_FUNDS':
             return { ...state, transfers: [...state.transfers, action.payload] }
@@ -398,10 +401,8 @@ export function budgetReducer(state: AppState, action: Action): AppState {
             }
 
         case 'DELETE_CREDIT_CARD':
-            return {
-                ...state,
-                creditCards: state.creditCards.filter((c) => c.id !== action.payload),
-            }
+            // Cascade: the delete dialog already promises the statements go too.
+            return cascadeDelete(state, 'creditCard', action.payload)
 
         // Credit Card Statements
         case 'ADD_STATEMENT': {
@@ -440,10 +441,8 @@ export function budgetReducer(state: AppState, action: Action): AppState {
             }
 
         case 'DELETE_SAVINGS_GOAL':
-            return {
-                ...state,
-                savingsGoals: state.savingsGoals.filter((g) => g.id !== action.payload),
-            }
+            // Cascade: the delete dialog already promises the contributions go too.
+            return cascadeDelete(state, 'savingsGoal', action.payload)
 
         // Savings Contributions
         case 'ADD_SAVINGS_CONTRIBUTION': {
@@ -567,12 +566,20 @@ type BudgetContextType = {
     // Categories
     addCategory: (category: Omit<Category, 'id'>) => void
     updateCategory: (category: Category) => void
-    deleteCategory: (id: string) => void
+    /**
+     * Blocked when records still reference the category: returns the typed
+     * failure so the caller can show the reason instead of a false success.
+     */
+    deleteCategory: (id: string) => DeleteCheck
     getCategoryById: (id: string) => Category | undefined
     // Accounts
     addAccount: (account: Omit<Account, 'id'>) => void
     updateAccount: (account: Account) => void
-    deleteAccount: (id: string) => void
+    /** Same contract as deleteCategory: a blocked delete explains itself. */
+    deleteAccount: (id: string) => DeleteCheck
+    /** The one definition of "in use", shared with the reducer. */
+    canDeleteAccount: (id: string) => DeleteCheck
+    canDeleteCategory: (id: string) => DeleteCheck
     transferFunds: (transfer: Omit<Transfer, 'id'>) => void
     // Income
     addIncome: (income: Omit<Income, 'id'>) => void
@@ -686,9 +693,18 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         dispatch({ type: 'UPDATE_CATEGORY', payload: category })
     }, [])
 
-    const deleteCategory = useCallback((id: string) => {
-        dispatch({ type: 'DELETE_CATEGORY', payload: id })
-    }, [])
+    const canDeleteCategory = useCallback(
+        (id: string) => checkDelete(state, 'category', id),
+        [state],
+    )
+
+    // The reducer would silently keep the category; returning the check makes
+    // the refusal visible to the caller instead of a no-op with a success toast.
+    const deleteCategory = useCallback((id: string): DeleteCheck => {
+        const check = checkDelete(state, 'category', id)
+        if (check.allowed) dispatch({ type: 'DELETE_CATEGORY', payload: id })
+        return check
+    }, [state])
 
     const getCategoryById = useCallback(
         (id: string) => state.categories.find((c) => c.id === id),
@@ -704,9 +720,16 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         dispatch({ type: 'UPDATE_ACCOUNT', payload: account })
     }, [])
 
-    const deleteAccount = useCallback((id: string) => {
-        dispatch({ type: 'DELETE_ACCOUNT', payload: id })
-    }, [])
+    const canDeleteAccount = useCallback(
+        (id: string) => checkDelete(state, 'account', id),
+        [state],
+    )
+
+    const deleteAccount = useCallback((id: string): DeleteCheck => {
+        const check = checkDelete(state, 'account', id)
+        if (check.allowed) dispatch({ type: 'DELETE_ACCOUNT', payload: id })
+        return check
+    }, [state])
 
     const transferFunds = useCallback((transfer: Omit<Transfer, 'id'>) => {
         dispatch({ type: 'TRANSFER_FUNDS', payload: { ...transfer, id: uuidv4() } })
@@ -856,10 +879,12 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         addCategory,
         updateCategory,
         deleteCategory,
+        canDeleteCategory,
         getCategoryById,
         addAccount,
         updateAccount,
         deleteAccount,
+        canDeleteAccount,
         transferFunds,
         addIncome,
         updateIncome,
