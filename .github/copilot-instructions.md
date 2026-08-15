@@ -20,6 +20,19 @@ Developer workflows & important commands
 - `npm test` / `npm run test:watch` — Vitest + Testing Library (jsdom).
 - `npm run lint` — ESLint via `eslint.config.mjs`.
 
+The derived-balance model (read this before touching money)
+----------------------------------------------------------
+- **Account balances are DERIVED** — `openingBalance + Σ effectsOf(records)`. Never write `account.balance`; there is no such field. `openingBalance` is a plain user-editable seed, not a running total: only the account-editing actions may change it.
+- **No reducer case may write an account balance.** If a change seems to need one, the change is wrong.
+- **Every money movement must be a record.** Adding a new kind of movement means adding an `effectsOf` clause in `app/utils/balances.ts` and nothing else. Deleting a record reverses it exactly, for free — a delete case that also does arithmetic reverses it twice.
+- **A bill does not move money.** Paying one creates an `Expense` carrying `billId`; `isPaid` is derived from that expense existing (`utils/balances.ts#isPaidBill`). There is no stored `isPaid`, `paidDate` or `paidFromAccountId` on a `Bill`.
+- **Savings-goal progress is derived** by `utils/balances.ts#goalProgress`: the linked account's balance, or Σ contributions when unlinked. `SavingsGoal.currentAmount` is a migration remnant that nothing reads — do not start reading or writing it.
+- **Deletes go through `app/utils/integrity.ts`** — cascade for credit cards and savings goals, block for accounts and categories. A blocked delete returns a typed `DeleteCheck` with a reason; surface it rather than reporting a false success.
+- `app/utils/balances.ts` imports only from `../types`. Importing `BudgetContext` from it creates a cycle.
+- Read balances through `balanceOf`/`computeBalanceMap`, not `computeBalances(state)[id] ?? 0`: for an unknown id of `'constructor'`/`'toString'` the bracket lookup resolves through `Object.prototype` and returns a function. Import data makes those ids reachable.
+- `app/context/__tests__/balance-property.test.ts` enforces all of the above as properties, so a new reducer case is covered without a new test. It does **not** check effect signs — those are pinned by `app/utils/__tests__/balances.test.ts`.
+- Migration lives in `app/utils/migrations.ts` and is pure; `BudgetContext` owns the I/O, including the one-time `budget-tracker-data.v1-backup`. Its ordering (bills backfilled before opening balances are derived) is load-bearing — see the file header.
+
 Project-specific conventions & patterns
 -------------------------------------
 - **Money is a plain `number`.** Known limitation, documented in the README. Don't silently change the representation; it would need a migration for existing `localStorage` data.
