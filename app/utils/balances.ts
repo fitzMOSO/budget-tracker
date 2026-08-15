@@ -70,3 +70,21 @@ export function computeBalances(state: AppState): Record<string, number> {
 export function balanceOf(state: AppState, accountId: string): number {
     return computeBalances(state)[accountId] ?? 0
 }
+
+/**
+ * The expense a bill payment created, if any. A bill never moves money itself;
+ * the linked expense IS the movement, so it also carries when the bill was paid
+ * (`date`) and which account it was paid from (`accountId`).
+ */
+export function linkedBillExpense(state: AppState, billId: string): Expense | undefined {
+    return state.expenses.find((e) => e.billId === billId)
+}
+
+/**
+ * "Paid" is derived, never stored: a bill is paid exactly when a linked expense
+ * exists. A stored flag alongside the link would be a second source of truth for
+ * one fact, which is how the old code could unpay a bill and mint money.
+ */
+export function isPaidBill(state: AppState, billId: string): boolean {
+    return state.expenses.some((e) => e.billId === billId)
+}
