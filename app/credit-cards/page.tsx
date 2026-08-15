@@ -25,7 +25,7 @@ import {
     getTodayISO,
     calculateCreditCardBalance,
 } from '../utils'
-import { showSuccess, showDeleteConfirm } from '../utils/swal'
+import { showSuccess, showDeleteConfirm, showError } from '../utils/swal'
 import type { CreditCard, CreditCardStatement, PaymentStatus, Account } from '../types'
 
 const CARD_COLORS = [
@@ -306,6 +306,11 @@ export default function CreditCardsPage() {
         if (!paymentStatement) return
 
         const additionalPayment = parseFloat(paymentAmount)
+        if (!Number.isFinite(additionalPayment) || additionalPayment <= 0) {
+            showError('Enter a payment amount greater than zero.')
+            return
+        }
+
         const newAmountPaid = paymentStatement.amountPaid + additionalPayment
         const newBalance = paymentStatement.statementBalance - newAmountPaid
 
