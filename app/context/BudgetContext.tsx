@@ -51,7 +51,9 @@ const initialState: AppState = {
 }
 
 // Action types
-type Action =
+// Exported so tests can build operation sequences that the compiler checks:
+// an invariant test is only as good as its ability to name every action.
+export type Action =
     | { type: 'LOAD_STATE'; payload: AppState }
     | { type: 'RESET_STATE' }
     // Categories
