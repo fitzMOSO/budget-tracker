@@ -59,7 +59,10 @@ describe('balance invariant', () => {
 
         s = budgetReducer(s, { type: 'PAY_BILL', payload: payment })
         s = budgetReducer(s, { type: 'DELETE_BILL', payload: 'b1' })
-        expect(computeBalances(s).a1).toBe(1000)
+        // Deleting the bill drops the schedule, not the transaction: the money
+        // really left the account, so the balance stays debited.
+        expect(computeBalances(s).a1).toBe(700)
+        expect(s.expenses).toHaveLength(1)
         expect(s.accounts[0].openingBalance).toBe(1000)
     })
 

@@ -17,6 +17,7 @@ import {
     DEFAULT_SETTINGS,
 } from '../types'
 import { allEffects } from './balances'
+import { BILL_PAYMENT_NOTE } from './bill-payment'
 import { v4 as uuidv4 } from 'uuid'
 
 export const CURRENT_SCHEMA_VERSION = 2
@@ -127,7 +128,7 @@ function backfillBillExpenses(bills: LegacyBill[], expenses: Expense[], linkOnly
                 e.amount === bill.amount &&
                 e.accountId === bill.paidFromAccountId &&
                 e.date === (bill.paidDate ?? bill.dueDate) &&
-                e.notes === 'Auto-created from bill payment'),
+                e.notes === BILL_PAYMENT_NOTE),
         )
 
         if (matchIndex !== -1) {
@@ -151,6 +152,31 @@ function backfillBillExpenses(bills: LegacyBill[], expenses: Expense[], linkOnly
     }
 
     return [...result, ...additions]
+}
+
+/**
+ * Normalises a bills+expenses pair that may predate derived `isPaid` — used by
+ * IMPORT_DATA, which otherwise writes a backup straight into state.
+ *
+ * A backup exported before this change carries `isPaid` on the bill and an
+ * unlinked auto-created expense. Imported as-is, every previously paid bill
+ * comes back UNPAID next to its own expense, so paying it again debits the
+ * account a second time.
+ *
+ * Deliberately link-only, and deliberately scoped to the imported set: it must
+ * not invent an expense for money that never moved, and must not let an imported
+ * bill adopt an expense the user already had in the app.
+ */
+export function relinkImportedBills(
+    rawBills: unknown,
+    rawExpenses: unknown,
+): { bills: Bill[]; expenses: Expense[] } {
+    const bills = Array.isArray(rawBills) ? (rawBills as LegacyBill[]) : []
+    const expenses = Array.isArray(rawExpenses) ? (rawExpenses as Expense[]) : []
+    return {
+        bills: bills.map(toBill),
+        expenses: backfillBillExpenses(bills, expenses, true),
+    }
 }
 
 export function migrate(raw: unknown): AppState {
