@@ -3,7 +3,7 @@
 import React from 'react'
 import { Card, CardHeader, CardTitle, CardContent, Badge, Button } from '../ui'
 import { formatCurrency, formatDate, isOverdue } from '../../utils'
-import { showPaymentDialog, showSuccess } from '../../utils/swal'
+import { showPaymentDialog, showSuccess, showError } from '../../utils/swal'
 import type { Bill, AppSettings, Account } from '../../types'
 
 interface UpcomingBillsProps {
@@ -18,8 +18,11 @@ interface UpcomingBillsProps {
     balances: Record<string, number>
     /** Derived: a bill is paid exactly when a linked expense exists. */
     isBillPaid: (billId: string) => boolean
-    /** Must be the context's payBill, so the dashboard and the bills page agree. */
-    onPayBill?: (bill: Bill, accountId: string) => void
+    /**
+     * Must be the context's payBill, so the dashboard and the bills page agree.
+     * Returns false when the bill was already paid and nothing happened.
+     */
+    onPayBill?: (bill: Bill, accountId: string) => boolean
 }
 
 export function UpcomingBills({ bills, settings, accounts, balances, isBillPaid, onPayBill }: UpcomingBillsProps) {
@@ -40,9 +43,13 @@ export function UpcomingBills({ bills, settings, accounts, balances, isBillPaid,
 
         if (result) {
             // Same single path as the bills page: this creates the linked
-            // expense, which is what actually moves the money.
-            onPayBill(bill, result.accountId)
-            showSuccess(`${bill.description} has been paid!`)
+            // expense, which is what actually moves the money. A false return
+            // means it was already paid and nothing happened.
+            if (onPayBill(bill, result.accountId)) {
+                showSuccess(`${bill.description} has been paid!`)
+            } else {
+                showError(`${bill.description} has already been paid.`)
+            }
         }
     }
 

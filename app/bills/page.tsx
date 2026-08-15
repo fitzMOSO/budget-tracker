@@ -25,7 +25,7 @@ import {
     groupBillsByStatus,
 } from '../utils'
 import { linkedBillExpense } from '../utils/balances'
-import { showPaymentDialog, showSuccess, showDeleteConfirm, showConfirm } from '../utils/swal'
+import { showPaymentDialog, showSuccess, showError, showDeleteConfirm, showConfirm } from '../utils/swal'
 import type { Bill, Account, Category } from '../types'
 
 export default function BillsPage() {
@@ -167,9 +167,13 @@ export default function BillsPage() {
             )
             if (result) {
                 // One path only: payBill creates the linked expense, which is
-                // the money movement. Uncategorised bills included.
-                payBill(bill, result.accountId)
-                showSuccess('Bill paid successfully!')
+                // the money movement. Uncategorised bills included. It refuses
+                // if the bill was already paid elsewhere, so don't claim success.
+                if (payBill(bill, result.accountId)) {
+                    showSuccess('Bill paid successfully!')
+                } else {
+                    showError('This bill has already been paid.')
+                }
             }
         }
     }

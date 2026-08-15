@@ -2,7 +2,7 @@
 
 import * as XLSX from 'xlsx'
 import type { AppState } from '../types'
-import { computeBalances, isPaidBill, linkedBillExpense } from './balances'
+import { computeBalances, linkedBillExpense } from './balances'
 
 // Helper function to format currency for export
 const formatAmount = (amount: number, symbol: string) => {
@@ -41,8 +41,11 @@ export const exportToExcel = (state: AppState, filename: string = 'budget-tracke
     // Calculate all-time totals
     const totalIncome = state.incomes.reduce((sum, i) => sum + i.amount, 0)
     const totalExpenses = state.expenses.reduce((sum, e) => sum + e.amount, 0)
-    const totalBillsPaid = state.bills.filter(b => isPaidBill(state, b.id)).reduce((sum, b) => sum + b.amount, 0)
-    const totalBillsUnpaid = state.bills.filter(b => !isPaidBill(state, b.id)).reduce((sum, b) => sum + b.amount, 0)
+    // One pass over the expenses, not one per bill: a bill is paid exactly when
+    // a linked expense exists (same derivation as BudgetContext's paidBillIds).
+    const paidBillIds = new Set(state.expenses.map(e => e.billId).filter(Boolean) as string[])
+    const totalBillsPaid = state.bills.filter(b => paidBillIds.has(b.id)).reduce((sum, b) => sum + b.amount, 0)
+    const totalBillsUnpaid = state.bills.filter(b => !paidBillIds.has(b.id)).reduce((sum, b) => sum + b.amount, 0)
     const totalSavings = state.savingsGoals.reduce((sum, g) => sum + g.currentAmount, 0)
     const totalAccountBalance = state.accounts.reduce((sum, a) => sum + (balances[a.id] ?? 0), 0)
     const totalCreditCardDebt = state.creditCardStatements
