@@ -36,7 +36,25 @@ export function ServiceWorkerRegistration() {
             if (document.visibilityState === 'visible') registration?.update()
         }
 
+        // Captured before registering: `sw.js` calls `clients.claim()` on
+        // activate, and claiming a page that loaded uncontrolled fires
+        // `controllerchange` on it. So a first-ever visit reaches the handler
+        // below with nothing stale on the page — the assets it is already
+        // showing ARE the ones the new worker just cached.
+        //
+        // Reloading there is not merely redundant: it is a visible reload for
+        // every first-time visitor, and it destroyed Lighthouse's execution
+        // context during the Netlify deploy audit, since headless Chrome is
+        // permanently a first-time visitor.
+        //
+        // Same distinction the update prompt already draws below via
+        // `navigator.serviceWorker.controller` — it just was never applied here.
+        const hadController = Boolean(navigator.serviceWorker.controller)
+
         const onControllerChange = () => {
+            // No previous controller means this is the initial claim, not a
+            // version handover. Nothing to discard, so nothing to reload.
+            if (!hadController) return
             if (reloadingRef.current) return
             reloadingRef.current = true
             window.location.reload()
