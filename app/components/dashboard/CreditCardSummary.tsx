@@ -3,7 +3,7 @@
 import React, { useState } from 'react'
 import { CreditCard as CreditCardIcon, AlertCircle, CheckCircle2, Clock } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardContent, Badge, ProgressBar, Modal, Input, Select, Button } from '../ui'
-import { formatCurrency, formatDate, calculateCreditCardBalance } from '../../utils'
+import { formatCurrency, formatDate, calculateCreditCardBalance, isValidAmount, INVALID_AMOUNT_MESSAGE } from '../../utils'
 import type { CreditCard, CreditCardStatement, AppSettings, PaymentStatus, Account } from '../../types'
 import { useBudget } from '../../context/BudgetContext'
 import { showSuccess, showError } from '../../utils/swal'
@@ -19,7 +19,7 @@ export function CreditCardSummary({
     statements,
     settings,
 }: CreditCardSummaryProps) {
-    const { state, updateStatement } = useBudget()
+    const { state, balanceOf, updateStatement } = useBudget()
     const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false)
     const [paymentStatement, setPaymentStatement] = useState<CreditCardStatement | null>(null)
     const [paymentAmount, setPaymentAmount] = useState('')
@@ -65,8 +65,8 @@ export function CreditCardSummary({
         if (!paymentStatement) return
 
         const additionalPayment = parseFloat(paymentAmount)
-        if (!additionalPayment || additionalPayment <= 0) {
-            showError('Payment amount must be greater than 0')
+        if (!isValidAmount(additionalPayment)) {
+            showError(INVALID_AMOUNT_MESSAGE)
             return
         }
 
@@ -278,7 +278,7 @@ export function CreditCardSummary({
                             label="Pay From Account"
                             options={state.accounts.map((account) => ({
                                 value: account.id,
-                                label: `${account.name} (${formatCurrency(account.balance, settings)})`,
+                                label: `${account.name} (${formatCurrency(balanceOf(account.id), settings)})`,
                             }))}
                             value={paymentAccountId}
                             onChange={(e) => setPaymentAccountId(e.target.value)}

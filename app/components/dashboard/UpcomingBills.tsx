@@ -3,19 +3,33 @@
 import React from 'react'
 import { Card, CardHeader, CardTitle, CardContent, Badge, Button } from '../ui'
 import { formatCurrency, formatDate, isOverdue } from '../../utils'
-import { showPaymentDialog, showSuccess } from '../../utils/swal'
+import { showPaymentDialog, showSuccess, showError } from '../../utils/swal'
 import type { Bill, AppSettings, Account } from '../../types'
 
 interface UpcomingBillsProps {
     bills: Bill[]
     settings: AppSettings
-    accounts?: Account[]
-    onPayBill?: (id: string, paidDate: string, accountId: string) => void
+    accounts: Account[]
+    /**
+     * Derived balance for one account; account.openingBalance is NOT the live
+     * balance. A function rather than a `Record<string, number>` because a
+     * bracket read of an unknown id resolves through Object.prototype. Required
+     * alongside `accounts`: defaulting it rendered every balance as 0 whenever a
+     * caller forgot to pass it.
+     */
+    balanceOf: (accountId: string) => number
+    /** Derived: a bill is paid exactly when a linked expense exists. */
+    isBillPaid: (billId: string) => boolean
+    /**
+     * Must be the context's payBill, so the dashboard and the bills page agree.
+     * Returns false when the bill was already paid and nothing happened.
+     */
+    onPayBill?: (bill: Bill, accountId: string) => boolean
 }
 
-export function UpcomingBills({ bills, settings, accounts = [], onPayBill }: UpcomingBillsProps) {
+export function UpcomingBills({ bills, settings, accounts, balanceOf, isBillPaid, onPayBill }: UpcomingBillsProps) {
     const sortedBills = [...bills]
-        .filter((b) => !b.isPaid)
+        .filter((b) => !isBillPaid(b.id))
         .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
         .slice(0, 5)
 
@@ -24,15 +38,20 @@ export function UpcomingBills({ bills, settings, accounts = [], onPayBill }: Upc
 
         const result = await showPaymentDialog(
             `Pay ${bill.description}?`,
-            accounts.map(acc => ({ id: acc.id, name: acc.name, balance: acc.balance })),
+            accounts.map(acc => ({ id: acc.id, name: acc.name, balance: balanceOf(acc.id) })),
             bill.amount,
             settings.currencySymbol
         )
 
         if (result) {
-            const today = new Date().toISOString().split('T')[0]
-            onPayBill(bill.id, today, result.accountId)
-            showSuccess(`${bill.description} has been paid!`)
+            // Same single path as the bills page: this creates the linked
+            // expense, which is what actually moves the money. A false return
+            // means it was already paid and nothing happened.
+            if (onPayBill(bill, result.accountId)) {
+                showSuccess(`${bill.description} has been paid!`)
+            } else {
+                showError(`${bill.description} has already been paid.`)
+            }
         }
     }
 
@@ -47,7 +66,8 @@ export function UpcomingBills({ bills, settings, accounts = [], onPayBill }: Upc
                 ) : (
                     <div className="space-y-3">
                         {sortedBills.map((bill) => {
-                            const overdue = isOverdue(bill.dueDate, bill.isPaid)
+                            // sortedBills only holds unpaid bills.
+                            const overdue = isOverdue(bill.dueDate, false)
                             return (
                                 <div
                                     key={bill.id}

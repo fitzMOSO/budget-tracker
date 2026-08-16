@@ -24,6 +24,7 @@ import {
     getTodayISO,
     getProgressPercentage,
 } from '../utils'
+import { totalGoalProgress } from '../utils/balances'
 import { showSuccess, showDeleteConfirm } from '../utils/swal'
 import type { SavingsGoal, SavingsContribution } from '../types'
 
@@ -41,6 +42,8 @@ const GOAL_COLORS = [
 export default function SavingsPage() {
     const {
         state,
+        balanceOf,
+        progressOfGoal,
         addSavingsGoal,
         updateSavingsGoal,
         deleteSavingsGoal,
@@ -86,7 +89,9 @@ export default function SavingsPage() {
     )
 
     // Calculate totals
-    const totalSaved = state.savingsGoals.reduce((sum, g) => sum + g.currentAmount, 0)
+    // NOT `Σ progressOfGoal(g)`: two goals linked to the same account would each
+    // count that account's whole balance. See utils/balances#totalGoalProgress.
+    const totalSaved = totalGoalProgress(state)
     const totalTarget = state.savingsGoals.reduce((sum, g) => sum + g.targetAmount, 0)
     const monthlyTotal = monthlyContributions.reduce((sum, c) => sum + c.amount, 0)
 
@@ -126,25 +131,20 @@ export default function SavingsPage() {
     const handleSubmitGoal = (e: React.FormEvent) => {
         e.preventDefault()
 
-        const linkedAccount = goalFormData.linkedAccountId
-            ? state.accounts.find(a => a.id === goalFormData.linkedAccountId)
-            : undefined
-
         const goalData = {
             name: goalFormData.name,
             targetAmount: parseFloat(goalFormData.targetAmount),
             deadline: goalFormData.deadline || undefined,
             color: goalFormData.color,
-            currentAmount: linkedAccount ? linkedAccount.balance : 0,
+            // Progress is derived, not stored. This field is a migration remnant
+            // nothing reads; writing a snapshot of the balance here is what let
+            // editing a goal silently restate its history.
+            currentAmount: 0,
             linkedAccountId: goalFormData.linkedAccountId || undefined,
         }
 
         if (editingGoal) {
-            updateSavingsGoal({
-                ...goalData,
-                id: editingGoal.id,
-                currentAmount: linkedAccount ? linkedAccount.balance : editingGoal.currentAmount,
-            })
+            updateSavingsGoal({ ...goalData, id: editingGoal.id })
             showSuccess('Savings goal updated!')
         } else {
             addSavingsGoal(goalData)
@@ -155,7 +155,14 @@ export default function SavingsPage() {
     }
 
     const handleDeleteGoal = async (goal: SavingsGoal) => {
-        const confirmed = await showDeleteConfirm(goal.name, 'This will also delete all contributions to this goal.')
+        // Say that balances move, the way the transfer dialog does. Every
+        // contribution is an effect on the account it came from (and on the
+        // linked account, if there is one), so this cascade is not only a
+        // records delete — the user will watch account balances change.
+        const confirmed = await showDeleteConfirm(
+            goal.name,
+            'This will also delete every contribution to this goal. The accounts they moved money between return to what they were before them.',
+        )
         if (confirmed) {
             deleteSavingsGoal(goal.id)
             showSuccess('Savings goal deleted!')
@@ -338,8 +345,9 @@ export default function SavingsPage() {
                         ) : (
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                 {state.savingsGoals.map((goal) => {
-                                    const percentage = getProgressPercentage(goal.currentAmount, goal.targetAmount)
-                                    const remaining = goal.targetAmount - goal.currentAmount
+                                    const saved = progressOfGoal(goal)
+                                    const percentage = getProgressPercentage(saved, goal.targetAmount)
+                                    const remaining = goal.targetAmount - saved
 
                                     return (
                                         <div
@@ -359,7 +367,7 @@ export default function SavingsPage() {
                                             </div>
 
                                             <ProgressBar
-                                                value={goal.currentAmount}
+                                                value={saved}
                                                 max={goal.targetAmount}
                                                 color={goal.color || 'bg-blue-600'}
                                                 size="lg"
@@ -370,7 +378,7 @@ export default function SavingsPage() {
                                                 <div className="flex justify-between text-sm">
                                                     <span className="text-gray-500">Saved:</span>
                                                     <span className="font-medium text-green-600">
-                                                        {formatCurrency(goal.currentAmount, state.settings)}
+                                                        {formatCurrency(saved, state.settings)}
                                                     </span>
                                                 </div>
                                                 <div className="flex justify-between text-sm">
@@ -490,7 +498,7 @@ export default function SavingsPage() {
                         onChange={(e) => setGoalFormData({ ...goalFormData, linkedAccountId: e.target.value })}
                         options={state.accounts.map((a) => ({
                             value: a.id,
-                            label: `${a.name} (${formatCurrency(a.balance, state.settings)})`,
+                            label: `${a.name} (${formatCurrency(balanceOf(a.id), state.settings)})`,
                         }))}
                         placeholder="Select account"
                     />
@@ -554,7 +562,7 @@ export default function SavingsPage() {
                         }
                         options={state.accounts.map((a) => ({
                             value: a.id,
-                            label: `${a.name} (${formatCurrency(a.balance, state.settings)})`
+                            label: `${a.name} (${formatCurrency(balanceOf(a.id), state.settings)})`
                         }))}
                         placeholder="Select account"
                         required

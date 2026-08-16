@@ -2,6 +2,7 @@
 
 import * as XLSX from 'xlsx'
 import type { AppState } from '../types'
+import { computeBalanceMap, goalProgress, totalGoalProgress, linkedBillExpense } from './balances'
 
 // Helper function to format currency for export
 const formatAmount = (amount: number, symbol: string) => {
@@ -29,6 +30,10 @@ const getCreditCardName = (cardId: string, cards: AppState['creditCards']) => {
 export const exportToExcel = (state: AppState, filename: string = 'budget-tracker-analytics') => {
     const workbook = XLSX.utils.book_new()
     const symbol = state.settings.currencySymbol
+    // Account balances are derived, never stored on the account itself. A Map,
+    // not a record: `balances[id] ?? 0` resolves an unknown id of 'constructor'
+    // or 'toString' through Object.prototype and yields a function.
+    const balances = computeBalanceMap(state)
 
     // ============== OVERVIEW SHEET ==============
     const now = new Date()
@@ -38,10 +43,14 @@ export const exportToExcel = (state: AppState, filename: string = 'budget-tracke
     // Calculate all-time totals
     const totalIncome = state.incomes.reduce((sum, i) => sum + i.amount, 0)
     const totalExpenses = state.expenses.reduce((sum, e) => sum + e.amount, 0)
-    const totalBillsPaid = state.bills.filter(b => b.isPaid).reduce((sum, b) => sum + b.amount, 0)
-    const totalBillsUnpaid = state.bills.filter(b => !b.isPaid).reduce((sum, b) => sum + b.amount, 0)
-    const totalSavings = state.savingsGoals.reduce((sum, g) => sum + g.currentAmount, 0)
-    const totalAccountBalance = state.accounts.reduce((sum, a) => sum + a.balance, 0)
+    // One pass over the expenses, not one per bill: a bill is paid exactly when
+    // a linked expense exists (same derivation as BudgetContext's paidBillIds).
+    const paidBillIds = new Set(state.expenses.map(e => e.billId).filter(Boolean) as string[])
+    const totalBillsPaid = state.bills.filter(b => paidBillIds.has(b.id)).reduce((sum, b) => sum + b.amount, 0)
+    const totalBillsUnpaid = state.bills.filter(b => !paidBillIds.has(b.id)).reduce((sum, b) => sum + b.amount, 0)
+    // Deduped by linked account: two goals on one account is one pile of money.
+    const totalSavings = totalGoalProgress(state)
+    const totalAccountBalance = state.accounts.reduce((sum, a) => sum + (balances.get(a.id) ?? 0), 0)
     const totalCreditCardDebt = state.creditCardStatements
         .filter(s => s.status !== 'paid')
         .reduce((sum, s) => sum + (s.statementBalance - s.amountPaid), 0)
@@ -63,7 +72,7 @@ export const exportToExcel = (state: AppState, filename: string = 'budget-tracke
         { Metric: '', Value: '' },
         { Metric: '=== ACCOUNT BALANCES ===', Value: '' },
         { Metric: 'Total Account Balance', Value: formatAmount(totalAccountBalance, symbol) },
-        ...state.accounts.map(a => ({ Metric: `  - ${a.name} (${a.type})`, Value: formatAmount(a.balance, symbol) })),
+        ...state.accounts.map(a => ({ Metric: `  - ${a.name} (${a.type})`, Value: formatAmount(balances.get(a.id) ?? 0, symbol) })),
         { Metric: '', Value: '' },
         { Metric: '=== ALL-TIME SUMMARY ===', Value: '' },
         { Metric: 'Total Income (All Time)', Value: formatAmount(totalIncome, symbol) },
@@ -203,17 +212,21 @@ export const exportToExcel = (state: AppState, filename: string = 'budget-tracke
     }
 
     // ============== BILLS STATUS SHEET ==============
-    const billsData = state.bills.map(b => ({
-        Description: b.description,
-        Amount: formatAmount(b.amount, symbol),
-        'Due Date': b.dueDate,
-        Status: b.isPaid ? 'Paid' : 'Unpaid',
-        'Paid Date': b.paidDate || '',
-        'Paid From': getAccountName(b.paidFromAccountId, state.accounts),
-        Recurring: b.isRecurring ? 'Yes' : 'No',
-        Category: getCategoryName(b.categoryId || '', state.categories),
-        Notes: b.notes || '',
-    }))
+    const billsData = state.bills.map(b => {
+        // Status, paid date and paying account all come from the linked expense.
+        const payment = linkedBillExpense(state, b.id)
+        return {
+            Description: b.description,
+            Amount: formatAmount(b.amount, symbol),
+            'Due Date': b.dueDate,
+            Status: payment ? 'Paid' : 'Unpaid',
+            'Paid Date': payment?.date || '',
+            'Paid From': getAccountName(payment?.accountId, state.accounts),
+            Recurring: b.isRecurring ? 'Yes' : 'No',
+            Category: getCategoryName(b.categoryId || '', state.categories),
+            Notes: b.notes || '',
+        }
+    })
     if (billsData.length > 0) {
         const billsSheet = XLSX.utils.json_to_sheet(billsData)
         billsSheet['!cols'] = [{ wch: 30 }, { wch: 15 }, { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 20 }, { wch: 10 }, { wch: 20 }, { wch: 30 }]
@@ -266,13 +279,15 @@ export const exportToExcel = (state: AppState, filename: string = 'budget-tracke
     // ============== SAVINGS GOALS SHEET ==============
     const savingsData = state.savingsGoals.map(g => {
         const contributions = state.savingsContributions.filter(c => c.savingsGoalId === g.id)
-        const progress = (g.currentAmount / g.targetAmount) * 100
-        
+        // Derived, like every other money figure in this export.
+        const saved = goalProgress(state, g)
+        const progress = (saved / g.targetAmount) * 100
+
         return {
             'Goal Name': g.name,
             'Target Amount': formatAmount(g.targetAmount, symbol),
-            'Current Amount': formatAmount(g.currentAmount, symbol),
-            'Remaining': formatAmount(g.targetAmount - g.currentAmount, symbol),
+            'Current Amount': formatAmount(saved, symbol),
+            'Remaining': formatAmount(g.targetAmount - saved, symbol),
             Progress: progress.toFixed(1) + '%',
             Deadline: g.deadline || 'No deadline',
             'Total Contributions': contributions.length,

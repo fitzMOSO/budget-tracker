@@ -15,6 +15,20 @@ export function ServiceWorkerRegistration() {
     useEffect(() => {
         if (!('serviceWorker' in navigator)) return
 
+        // `sw.js` is emitted by `workbox injectManifest` into `out/` during
+        // `build:web`, so it does not exist under `next dev`. Registering it
+        // there fetches the dev server's 404 HTML page, which the browser
+        // rejects with "unsupported MIME type ('text/html')" on every load.
+        // Tear down instead: a worker left registered by an earlier build keeps
+        // serving cached assets on localhost and quietly defeats hot reload.
+        if (process.env.NODE_ENV !== 'production') {
+            navigator.serviceWorker.getRegistrations().then((registrations) => {
+                registrations.forEach((reg) => reg.unregister())
+            })
+            caches?.keys().then((keys) => keys.forEach((key) => caches.delete(key)))
+            return
+        }
+
         let registration: ServiceWorkerRegistration | undefined
         let intervalId: ReturnType<typeof setInterval> | undefined
 

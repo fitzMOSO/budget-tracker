@@ -38,7 +38,7 @@ const CATEGORY_COLORS = [
 ]
 
 export default function CategoriesPage() {
-    const { state, addCategory, updateCategory, deleteCategory, isLoading } = useBudget()
+    const { state, addCategory, updateCategory, deleteCategory, canDeleteCategory, isLoading } = useBudget()
     const { month: currentMonth, year: currentYear } = getMonthYear()
     const [selectedMonth, setSelectedMonth] = useState(currentMonth)
     const [selectedYear, setSelectedYear] = useState(currentYear)
@@ -123,11 +123,24 @@ export default function CategoriesPage() {
             showError('Cannot delete default categories.')
             return
         }
-        const confirmed = await showDeleteConfirm(category.name)
-        if (confirmed) {
-            deleteCategory(category.id)
-            showSuccess('Category deleted!')
+        // Blocked rather than reassigned: there is no real "Uncategorized"
+        // record to move these to, and a silent no-op used to leave the records
+        // pointing at a dead id that the edit form would happily re-save.
+        const check = canDeleteCategory(category.id)
+        if (!check.allowed) {
+            showError(check.reason)
+            return
         }
+
+        const confirmed = await showDeleteConfirm(category.name)
+        if (!confirmed) return
+
+        const result = deleteCategory(category.id)
+        if (!result.allowed) {
+            showError(result.reason)
+            return
+        }
+        showSuccess('Category deleted!')
     }
 
     const columns = [

@@ -38,9 +38,9 @@ function daysAhead(days: number): string {
  */
 export function buildDemoData(): Partial<AppState> {
     const accounts: Account[] = [
-        { id: id('acct', 1), name: 'Cash', type: 'cash', balance: 4500, color: '#22c55e', isDefault: true },
-        { id: id('acct', 2), name: 'BPI Savings', type: 'bank', balance: 68200, color: '#3b82f6' },
-        { id: id('acct', 3), name: 'GCash', type: 'e-wallet', balance: 3150, color: '#0070f3' },
+        { id: id('acct', 1), name: 'Cash', type: 'cash', openingBalance: 4500, color: '#22c55e', isDefault: true },
+        { id: id('acct', 2), name: 'BPI Savings', type: 'bank', openingBalance: 68200, color: '#3b82f6' },
+        { id: id('acct', 3), name: 'GCash', type: 'e-wallet', openingBalance: 3150, color: '#0070f3' },
     ]
 
     const categories: Category[] = [
@@ -62,11 +62,12 @@ export function buildDemoData(): Partial<AppState> {
     ]
 
     const expenses: Expense[] = [
-        { id: id('exp', 1), description: 'Apartment rent', amount: 18000, date: daysAgo(26), categoryId: id('cat', 3), accountId: id('acct', 2), expenseType: 'essential' },
+        // billId is what makes bill 1 show as paid — bills store no isPaid flag.
+        { id: id('exp', 1), description: 'Apartment rent', amount: 18000, date: daysAgo(26), categoryId: id('cat', 3), accountId: id('acct', 2), expenseType: 'essential', billId: id('bill', 1) },
         { id: id('exp', 2), description: 'Weekly groceries', amount: 3400, date: daysAgo(21), categoryId: id('cat', 4), accountId: id('acct', 1), expenseType: 'essential' },
         { id: id('exp', 3), description: 'Weekly groceries', amount: 2950, date: daysAgo(14), categoryId: id('cat', 4), accountId: id('acct', 1), expenseType: 'essential' },
         { id: id('exp', 4), description: 'Weekly groceries', amount: 3720, date: daysAgo(7), categoryId: id('cat', 4), accountId: id('acct', 1), expenseType: 'essential' },
-        { id: id('exp', 5), description: 'Electricity bill', amount: 2840, date: daysAgo(18), categoryId: id('cat', 8), accountId: id('acct', 2), expenseType: 'essential' },
+        { id: id('exp', 5), description: 'Electricity bill', amount: 2840, date: daysAgo(18), categoryId: id('cat', 8), accountId: id('acct', 2), expenseType: 'essential', billId: id('bill', 2) },
         { id: id('exp', 6), description: 'Grab to office', amount: 890, date: daysAgo(9), categoryId: id('cat', 5), accountId: id('acct', 3), expenseType: 'essential' },
         { id: id('exp', 7), description: 'Dinner with friends', amount: 1650, date: daysAgo(6), categoryId: id('cat', 6), accountId: id('acct', 1), expenseType: 'non-essential' },
         { id: id('exp', 8), description: 'Streaming subscriptions', amount: 749, date: daysAgo(5), categoryId: id('cat', 7), accountId: id('acct', 3), expenseType: 'non-essential' },
@@ -74,9 +75,10 @@ export function buildDemoData(): Partial<AppState> {
     ]
 
     const bills: Bill[] = [
-        { id: id('bill', 1), description: 'Apartment rent', amount: 18000, dueDate: daysAgo(26), isPaid: true, paidDate: daysAgo(26), paidFromAccountId: id('acct', 2), isRecurring: true, categoryId: id('cat', 3) },
-        { id: id('bill', 2), description: 'Electricity', amount: 2840, dueDate: daysAgo(18), isPaid: true, paidDate: daysAgo(18), paidFromAccountId: id('acct', 2), isRecurring: true, categoryId: id('cat', 8) },
-        { id: id('bill', 3), description: 'Internet', amount: 1699, dueDate: daysAhead(6), isPaid: false, isRecurring: true, categoryId: id('cat', 9) },
+        // Bills 1 and 2 read as paid because exp 1 and exp 5 link back to them.
+        { id: id('bill', 1), description: 'Apartment rent', amount: 18000, dueDate: daysAgo(26), isRecurring: true, categoryId: id('cat', 3) },
+        { id: id('bill', 2), description: 'Electricity', amount: 2840, dueDate: daysAgo(18), isRecurring: true, categoryId: id('cat', 8) },
+        { id: id('bill', 3), description: 'Internet', amount: 1699, dueDate: daysAhead(6), isRecurring: true, categoryId: id('cat', 9) },
     ]
 
     const creditCards: CreditCard[] = [
@@ -88,9 +90,13 @@ export function buildDemoData(): Partial<AppState> {
         { id: id('stmt', 2), creditCardId: id('card', 1), statementBalance: 13500, amountPaid: 5000, dueDate: daysAhead(10), status: 'partial', paidFromAccountId: id('acct', 2) },
     ]
 
+    // `currentAmount` is a migration remnant nothing reads: progress is derived
+    // from the contributions below (utils/balances#goalProgress). Targets are
+    // sized so the demo's contributions read as a plausible early balance rather
+    // than a number the demo shows but cannot account for.
     const savingsGoals: SavingsGoal[] = [
-        { id: id('goal', 1), name: 'Emergency Fund', targetAmount: 180000, currentAmount: 62000, color: '#22c55e' },
-        { id: id('goal', 2), name: 'Japan Trip', targetAmount: 120000, currentAmount: 28500, deadline: '2027-03-01', color: '#3b82f6' },
+        { id: id('goal', 1), name: 'Emergency Fund', targetAmount: 60000, currentAmount: 0, color: '#22c55e' },
+        { id: id('goal', 2), name: 'Japan Trip', targetAmount: 30000, currentAmount: 0, deadline: '2027-03-01', color: '#3b82f6' },
     ]
 
     const savingsContributions: SavingsContribution[] = [

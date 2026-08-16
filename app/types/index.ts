@@ -15,9 +15,19 @@ export interface Account {
   id: string;
   name: string;
   type: 'bank' | 'cash' | 'e-wallet' | 'other';
-  balance: number;
+  /** Seed value; the live balance is derived, never stored. */
+  openingBalance: number;
   color?: string;
   isDefault?: boolean;
+}
+
+export interface Transfer {
+  id: string;
+  fromAccountId: string;
+  toAccountId: string;
+  amount: number;
+  date: string; // YYYY-MM-DD
+  notes?: string;
 }
 
 export interface Income {
@@ -42,18 +52,22 @@ export interface Expense {
   accountId?: string; // Which account the expense was deducted from
   expenseType: ExpenseType;
   notes?: string;
+  billId?: string; // Set when this expense represents a paid bill (migration backfill or bill payment)
 }
 
 export type ExpenseType = 'essential' | 'non-essential' | 'savings';
 
+/**
+ * A bill is a scheduled obligation, never a movement of money. Whether it is
+ * paid, when it was paid and which account paid it are all DERIVED from the
+ * linked expense (`Expense.billId`) — see `utils/balances.ts#isPaidBill`.
+ * Storing them here as well would be a second source of truth for one fact.
+ */
 export interface Bill {
   id: string;
   description: string;
   amount: number;
   dueDate: string;
-  isPaid: boolean;
-  paidDate?: string;
-  paidFromAccountId?: string; // Which account the bill was paid from
   isRecurring?: boolean;
   recurringSourceId?: string; // ID of the original recurring bill this was generated from
   categoryId?: string;
@@ -146,6 +160,8 @@ export interface AppState {
   savingsGoals: SavingsGoal[];
   savingsContributions: SavingsContribution[];
   monthlyBudgets: MonthlyBudget[];
+  transfers: Transfer[];
+  schemaVersion: number;
   settings: AppSettings;
 }
 
@@ -202,8 +218,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
 
 // Default Accounts
 export const DEFAULT_ACCOUNTS: Omit<Account, 'id'>[] = [
-  { name: 'Cash', type: 'cash', balance: 0, color: '#22c55e', isDefault: true },
-  { name: 'Bank Account', type: 'bank', balance: 0, color: '#3b82f6', isDefault: true },
-  { name: 'GCash', type: 'e-wallet', balance: 0, color: '#0070f3', isDefault: true },
-  { name: 'Maya', type: 'e-wallet', balance: 0, color: '#00b894', isDefault: true },
+  { name: 'Cash', type: 'cash', openingBalance: 0, color: '#22c55e', isDefault: true },
+  { name: 'Bank Account', type: 'bank', openingBalance: 0, color: '#3b82f6', isDefault: true },
+  { name: 'GCash', type: 'e-wallet', openingBalance: 0, color: '#0070f3', isDefault: true },
+  { name: 'Maya', type: 'e-wallet', openingBalance: 0, color: '#00b894', isDefault: true },
 ];

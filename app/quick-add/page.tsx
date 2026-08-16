@@ -5,13 +5,13 @@ import { useSearchParams, useRouter } from 'next/navigation'
 import { TrendingUp, TrendingDown, ArrowLeftRight, Home } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardContent, Input, Select, Button } from '../components/ui'
 import { useBudget } from '../context/BudgetContext'
-import { formatCurrency, getTodayISO } from '../utils'
+import { formatCurrency, getTodayISO, isValidAmount, INVALID_AMOUNT_MESSAGE } from '../utils'
 import { showSuccess, showError } from '../utils/swal'
 
 function QuickAddContent() {
     const searchParams = useSearchParams()
     const router = useRouter()
-    const { state, transferFunds, addIncome, addExpense, isLoading } = useBudget()
+    const { state, balanceOf, transferFunds, addIncome, addExpense, isLoading } = useBudget()
 
     const type = searchParams.get('type') || 'expense'
 
@@ -73,8 +73,8 @@ function QuickAddContent() {
         e.preventDefault()
 
         const amount = parseFloat(incomeData.amount)
-        if (amount <= 0) {
-            showError('Amount must be greater than 0')
+        if (!isValidAmount(amount)) {
+            showError(INVALID_AMOUNT_MESSAGE)
             return
         }
 
@@ -98,8 +98,8 @@ function QuickAddContent() {
         e.preventDefault()
 
         const amount = parseFloat(expenseData.amount)
-        if (amount <= 0) {
-            showError('Amount must be greater than 0')
+        if (!isValidAmount(amount)) {
+            showError(INVALID_AMOUNT_MESSAGE)
             return
         }
 
@@ -134,18 +134,23 @@ function QuickAddContent() {
         }
 
         const amount = parseFloat(transferData.amount)
-        if (amount <= 0) {
-            showError('Amount must be greater than 0')
+        if (!isValidAmount(amount)) {
+            showError(INVALID_AMOUNT_MESSAGE)
             return
         }
 
         const fromAccount = state.accounts.find(a => a.id === transferData.fromAccountId)
-        if (fromAccount && fromAccount.balance < amount) {
+        if (fromAccount && balanceOf(fromAccount.id) < amount) {
             showError('Insufficient balance in source account')
             return
         }
 
-        transferFunds(transferData.fromAccountId, transferData.toAccountId, amount)
+        transferFunds({
+            fromAccountId: transferData.fromAccountId,
+            toAccountId: transferData.toAccountId,
+            amount,
+            date: getTodayISO(),
+        })
         showSuccess('Transfer completed successfully!')
         router.push('/')
     }
@@ -270,7 +275,7 @@ function QuickAddContent() {
                                     onChange={(e) => setExpenseData({ ...expenseData, accountId: e.target.value })}
                                     options={state.accounts.map((a) => ({
                                         value: a.id,
-                                        label: `${a.name} (${formatCurrency(a.balance, state.settings)})`,
+                                        label: `${a.name} (${formatCurrency(balanceOf(a.id), state.settings)})`,
                                     }))}
                                     required
                                 />
@@ -352,7 +357,7 @@ function QuickAddContent() {
                                     onChange={(e) => setIncomeData({ ...incomeData, accountId: e.target.value })}
                                     options={state.accounts.map((a) => ({
                                         value: a.id,
-                                        label: `${a.name} (${formatCurrency(a.balance, state.settings)})`,
+                                        label: `${a.name} (${formatCurrency(balanceOf(a.id), state.settings)})`,
                                     }))}
                                     required
                                 />
@@ -391,7 +396,7 @@ function QuickAddContent() {
                                     onChange={(e) => setTransferData({ ...transferData, fromAccountId: e.target.value })}
                                     options={state.accounts.map((a) => ({
                                         value: a.id,
-                                        label: `${a.name} (${formatCurrency(a.balance, state.settings)})`,
+                                        label: `${a.name} (${formatCurrency(balanceOf(a.id), state.settings)})`,
                                     }))}
                                     required
                                 />
@@ -404,7 +409,7 @@ function QuickAddContent() {
                                         .filter((a) => a.id !== transferData.fromAccountId)
                                         .map((a) => ({
                                             value: a.id,
-                                            label: `${a.name} (${formatCurrency(a.balance, state.settings)})`,
+                                            label: `${a.name} (${formatCurrency(balanceOf(a.id), state.settings)})`,
                                         }))}
                                     required
                                 />

@@ -1,6 +1,6 @@
 'use client'
 
-import React, { createContext, useContext, useReducer, useEffect, useCallback } from 'react'
+import React, { createContext, useContext, useReducer, useEffect, useCallback, useMemo, useRef } from 'react'
 import { v4 as uuidv4 } from 'uuid'
 import type {
     AppState,
@@ -15,6 +15,7 @@ import type {
     SavingsContribution,
     MonthlyBudget,
     AppSettings,
+    Transfer,
     DEFAULT_INCOME_CATEGORIES,
     DEFAULT_EXPENSE_CATEGORIES,
     DEFAULT_SETTINGS,
@@ -25,6 +26,11 @@ import {
     DEFAULT_SETTINGS as defaultSettings,
     DEFAULT_ACCOUNTS as defaultAccounts,
 } from '../types'
+import { migrate, CURRENT_SCHEMA_VERSION, V1_BACKUP_KEY } from '../utils/migrations'
+import { COLLECTION_KEYS } from '../utils/backup'
+import { computeBalanceMap, goalProgress } from '../utils/balances'
+import { buildBillExpense } from '../utils/bill-payment'
+import { checkDelete, cascadeDelete, type DeleteCheck } from '../utils/integrity'
 
 const STORAGE_KEY = 'budget-tracker-data'
 
@@ -40,11 +46,15 @@ const initialState: AppState = {
     savingsGoals: [],
     savingsContributions: [],
     monthlyBudgets: [],
+    transfers: [],
+    schemaVersion: CURRENT_SCHEMA_VERSION,
     settings: defaultSettings,
 }
 
 // Action types
-type Action =
+// Exported so tests can build operation sequences that the compiler checks:
+// an invariant test is only as good as its ability to name every action.
+export type Action =
     | { type: 'LOAD_STATE'; payload: AppState }
     | { type: 'RESET_STATE' }
     // Categories
@@ -55,8 +65,8 @@ type Action =
     | { type: 'ADD_ACCOUNT'; payload: Account }
     | { type: 'UPDATE_ACCOUNT'; payload: Account }
     | { type: 'DELETE_ACCOUNT'; payload: string }
-    | { type: 'UPDATE_ACCOUNT_BALANCE'; payload: { id: string; amount: number; operation: 'add' | 'subtract' } }
-    | { type: 'TRANSFER_FUNDS'; payload: { fromAccountId: string; toAccountId: string; amount: number } }
+    | { type: 'TRANSFER_FUNDS'; payload: Transfer }
+    | { type: 'DELETE_TRANSFER'; payload: string }
     // Income
     | { type: 'ADD_INCOME'; payload: Income }
     | { type: 'UPDATE_INCOME'; payload: Income }
@@ -69,7 +79,7 @@ type Action =
     | { type: 'ADD_BILL'; payload: Bill }
     | { type: 'UPDATE_BILL'; payload: Bill }
     | { type: 'DELETE_BILL'; payload: string }
-    | { type: 'PAY_BILL'; payload: { id: string; paidDate: string; accountId: string } }
+    | { type: 'PAY_BILL'; payload: { billId: string; expense: Expense } }
     | { type: 'UNPAY_BILL'; payload: string }
     | { type: 'GENERATE_RECURRING_BILLS'; payload: { month: number; year: number } }
     // Credit Cards
@@ -95,14 +105,25 @@ type Action =
     // Import
     | { type: 'IMPORT_DATA'; payload: Partial<AppState> }
 
+export function seedState(): AppState {
+    return {
+        ...initialState,
+        categories: [
+            ...defaultIncomeCategories.map((c) => ({ ...c, id: uuidv4() })),
+            ...defaultExpenseCategories.map((c) => ({ ...c, id: uuidv4() })),
+        ],
+        accounts: defaultAccounts.map((a) => ({ ...a, id: uuidv4() })),
+    }
+}
+
 // Reducer
-function reducer(state: AppState, action: Action): AppState {
+export function budgetReducer(state: AppState, action: Action): AppState {
     switch (action.type) {
         case 'LOAD_STATE':
             return action.payload
 
         case 'RESET_STATE':
-            return initialState
+            return { ...seedState(), settings: state.settings }
 
         // Categories
         case 'ADD_CATEGORY':
@@ -117,281 +138,112 @@ function reducer(state: AppState, action: Action): AppState {
             }
 
         case 'DELETE_CATEGORY':
-            return {
-                ...state,
-                categories: state.categories.filter((c) => c.id !== action.payload),
-            }
+            // Blocked, not reassigned: there is no real "Uncategorized" record,
+            // only a display fallback. The context's deleteCategory runs the same
+            // check first and hands the caller the reason, so a UI that reaches
+            // here anyway (or a future caller) still cannot orphan a categoryId.
+            return checkDelete(state, 'category', action.payload).allowed
+                ? { ...state, categories: state.categories.filter((c) => c.id !== action.payload) }
+                : state
 
         // Accounts
         case 'ADD_ACCOUNT':
             return { ...state, accounts: [...state.accounts, action.payload] }
 
         case 'UPDATE_ACCOUNT':
-            {
-                const updatedAccounts = state.accounts.map((a) =>
+            // openingBalance is a plain user-editable field now; store the payload verbatim.
+            return {
+                ...state,
+                accounts: state.accounts.map((a) =>
                     a.id === action.payload.id ? action.payload : a
-                )
-                const syncedGoals = state.savingsGoals.map((g) => {
-                    if (!g.linkedAccountId) return g
-                    const linkedAccount = updatedAccounts.find((a) => a.id === g.linkedAccountId)
-                    return linkedAccount ? { ...g, currentAmount: linkedAccount.balance } : g
-                })
-                return {
-                    ...state,
-                    accounts: updatedAccounts,
-                    savingsGoals: syncedGoals,
-                }
+                ),
             }
 
         case 'DELETE_ACCOUNT':
-            return {
-                ...state,
-                accounts: state.accounts.filter((a) => a.id !== action.payload),
-            }
-
-        case 'UPDATE_ACCOUNT_BALANCE':
-            {
-                const updatedAccounts = state.accounts.map((a) =>
-                    a.id === action.payload.id
-                        ? {
-                            ...a,
-                            balance: action.payload.operation === 'add'
-                                ? a.balance + action.payload.amount
-                                : a.balance - action.payload.amount
-                        }
-                        : a
-                )
-                const syncedGoals = state.savingsGoals.map((g) => {
-                    if (!g.linkedAccountId) return g
-                    const linkedAccount = updatedAccounts.find((a) => a.id === g.linkedAccountId)
-                    return linkedAccount ? { ...g, currentAmount: linkedAccount.balance } : g
-                })
-                return {
-                    ...state,
-                    accounts: updatedAccounts,
-                    savingsGoals: syncedGoals,
-                }
-            }
+            return checkDelete(state, 'account', action.payload).allowed
+                ? { ...state, accounts: state.accounts.filter((a) => a.id !== action.payload) }
+                : state
 
         case 'TRANSFER_FUNDS':
-            {
-                const linkedGoals = state.savingsGoals.filter(
-                    (g) => g.linkedAccountId === action.payload.toAccountId
-                )
-                const linkedSourceGoals = state.savingsGoals.filter(
-                    (g) => g.linkedAccountId === action.payload.fromAccountId
-                )
-                const updatedAccounts = state.accounts.map((a) => {
-                    if (a.id === action.payload.fromAccountId) {
-                        return { ...a, balance: a.balance - action.payload.amount }
-                    }
-                    if (a.id === action.payload.toAccountId) {
-                        return { ...a, balance: a.balance + action.payload.amount }
-                    }
-                    return a
-                })
-                const syncedGoals = state.savingsGoals.map((g) => {
-                    if (!g.linkedAccountId) return g
-                    const linkedAccount = updatedAccounts.find((a) => a.id === g.linkedAccountId)
-                    return linkedAccount ? { ...g, currentAmount: linkedAccount.balance } : g
-                })
-                const transferContributions: SavingsContribution[] = linkedGoals.map((goal) => ({
-                    id: uuidv4(),
-                    savingsGoalId: goal.id,
-                    amount: action.payload.amount,
-                    date: new Date().toISOString().slice(0, 10),
-                    fromAccountId: action.payload.fromAccountId,
-                    notes: 'Transfer to linked savings account',
-                }))
-                const transferOutContributions: SavingsContribution[] = linkedSourceGoals.map((goal) => ({
-                    id: uuidv4(),
-                    savingsGoalId: goal.id,
-                    amount: -action.payload.amount,
-                    date: new Date().toISOString().slice(0, 10),
-                    fromAccountId: action.payload.fromAccountId,
-                    notes: 'Transfer out of linked savings account',
-                }))
-                return {
-                    ...state,
-                    accounts: updatedAccounts,
-                    savingsGoals: syncedGoals,
-                    savingsContributions: [...state.savingsContributions, ...transferContributions, ...transferOutContributions],
-                }
+            return { ...state, transfers: [...state.transfers, action.payload] }
+
+        case 'DELETE_TRANSFER':
+            // Removing the record IS the whole reversal — both legs of the
+            // transfer are effects of this record, so the balances re-derive.
+            // Any arithmetic here would reverse it a second time.
+            //
+            // There is deliberately no UPDATE_TRANSFER: nothing in the state
+            // references a transfer id, so delete-and-re-add is
+            // indistinguishable from an in-place edit, and a second mutation
+            // path is one more place to get the effect signs wrong.
+            return {
+                ...state,
+                transfers: state.transfers.filter((t) => t.id !== action.payload),
             }
 
         // Income
-        case 'ADD_INCOME': {
-            const income = action.payload
-            // If accountId is provided, add the amount to the account balance
-            if (income.accountId) {
-                return {
-                    ...state,
-                    incomes: [...state.incomes, income],
-                    accounts: state.accounts.map((a) =>
-                        a.id === income.accountId
-                            ? { ...a, balance: a.balance + income.amount }
-                            : a
-                    ),
-                }
-            }
-            return { ...state, incomes: [...state.incomes, income] }
-        }
+        case 'ADD_INCOME':
+            return { ...state, incomes: [...state.incomes, action.payload] }
 
-        case 'UPDATE_INCOME': {
-            const updatedIncome = action.payload
-            const oldIncome = state.incomes.find((i) => i.id === updatedIncome.id)
-
-            if (!oldIncome) {
-                return {
-                    ...state,
-                    incomes: state.incomes.map((i) =>
-                        i.id === updatedIncome.id ? updatedIncome : i
-                    ),
-                }
-            }
-
-            // Calculate account balance adjustments
-            let updatedAccounts = [...state.accounts]
-
-            // If old income had an account, deduct the old amount
-            if (oldIncome.accountId) {
-                updatedAccounts = updatedAccounts.map((a) =>
-                    a.id === oldIncome.accountId
-                        ? { ...a, balance: a.balance - oldIncome.amount }
-                        : a
-                )
-            }
-
-            // If new income has an account, add the new amount
-            if (updatedIncome.accountId) {
-                updatedAccounts = updatedAccounts.map((a) =>
-                    a.id === updatedIncome.accountId
-                        ? { ...a, balance: a.balance + updatedIncome.amount }
-                        : a
-                )
-            }
-
+        case 'UPDATE_INCOME':
             return {
                 ...state,
                 incomes: state.incomes.map((i) =>
-                    i.id === updatedIncome.id ? updatedIncome : i
+                    i.id === action.payload.id ? action.payload : i
                 ),
-                accounts: updatedAccounts,
-            }
-        }
-
-        case 'DELETE_INCOME': {
-            const incomeToDelete = state.incomes.find((i) => i.id === action.payload)
-
-            // If income had an account, deduct the amount back
-            if (incomeToDelete?.accountId) {
-                return {
-                    ...state,
-                    incomes: state.incomes.filter((i) => i.id !== action.payload),
-                    accounts: state.accounts.map((a) =>
-                        a.id === incomeToDelete.accountId
-                            ? { ...a, balance: a.balance - incomeToDelete.amount }
-                            : a
-                    ),
-                }
             }
 
+        case 'DELETE_INCOME':
             return {
                 ...state,
                 incomes: state.incomes.filter((i) => i.id !== action.payload),
             }
-        }
 
         // Expenses
-        case 'ADD_EXPENSE': {
-            const expense = action.payload
-            // If accountId is provided, deduct the amount from the account balance
-            if (expense.accountId) {
-                return {
-                    ...state,
-                    expenses: [...state.expenses, expense],
-                    accounts: state.accounts.map((a) =>
-                        a.id === expense.accountId
-                            ? { ...a, balance: a.balance - expense.amount }
-                            : a
-                    ),
-                }
-            }
-            return { ...state, expenses: [...state.expenses, expense] }
-        }
+        case 'ADD_EXPENSE':
+            return { ...state, expenses: [...state.expenses, action.payload] }
 
-        case 'UPDATE_EXPENSE': {
-            const updatedExpense = action.payload
-            const oldExpense = state.expenses.find((e) => e.id === updatedExpense.id)
-
-            if (!oldExpense) {
-                return {
-                    ...state,
-                    expenses: state.expenses.map((e) =>
-                        e.id === updatedExpense.id ? updatedExpense : e
-                    ),
-                }
-            }
-
-            // Calculate account balance adjustments
-            let updatedAccounts = [...state.accounts]
-
-            // If old expense had an account, refund the old amount
-            if (oldExpense.accountId) {
-                updatedAccounts = updatedAccounts.map((a) =>
-                    a.id === oldExpense.accountId
-                        ? { ...a, balance: a.balance + oldExpense.amount }
-                        : a
-                )
-            }
-
-            // If new expense has an account, deduct the new amount
-            if (updatedExpense.accountId) {
-                updatedAccounts = updatedAccounts.map((a) =>
-                    a.id === updatedExpense.accountId
-                        ? { ...a, balance: a.balance - updatedExpense.amount }
-                        : a
-                )
-            }
-
+        case 'UPDATE_EXPENSE':
+            // Wholesale replace, EXCEPT the bill link. `billId` is a structural
+            // link, not a field of the edit form: it is the only record that a
+            // bill was paid, because `isPaid` is derived from it. An edit form
+            // that has never heard of it would otherwise un-pay the bill and
+            // disarm PAY_BILL's double-pay guard, so the next "Pay Now" debits
+            // the account a second time for one bill.
+            //
+            // Unlinking is still possible — DELETE_BILL, UNPAY_BILL and the
+            // recurring-off branch of UPDATE_BILL all clear it directly. Those
+            // are the paths that mean it; an edit never does.
             return {
                 ...state,
                 expenses: state.expenses.map((e) =>
-                    e.id === updatedExpense.id ? updatedExpense : e
+                    e.id === action.payload.id
+                        ? { ...action.payload, billId: action.payload.billId ?? e.billId }
+                        : e
                 ),
-                accounts: updatedAccounts,
-            }
-        }
-
-        case 'DELETE_EXPENSE': {
-            const expenseToDelete = state.expenses.find((e) => e.id === action.payload)
-
-            // If expense had an account, refund the amount
-            if (expenseToDelete?.accountId) {
-                return {
-                    ...state,
-                    expenses: state.expenses.filter((e) => e.id !== action.payload),
-                    accounts: state.accounts.map((a) =>
-                        a.id === expenseToDelete.accountId
-                            ? { ...a, balance: a.balance + expenseToDelete.amount }
-                            : a
-                    ),
-                }
             }
 
+        case 'DELETE_EXPENSE':
             return {
                 ...state,
                 expenses: state.expenses.filter((e) => e.id !== action.payload),
             }
-        }
 
         // Bills
         case 'ADD_BILL':
             return { ...state, bills: [...state.bills, action.payload] }
 
         case 'UPDATE_BILL': {
-            const updatedBill = action.payload
-            const existingBill = state.bills.find((b) => b.id === updatedBill.id)
+            const existingBill = state.bills.find((b) => b.id === action.payload.id)
+            // Same reasoning as UPDATE_EXPENSE's billId: recurringSourceId is a
+            // structural link no edit form renders, and it is the only record
+            // that this bill already covers its month. Dropping it makes
+            // GENERATE_RECURRING_BILLS generate a SECOND bill for that month,
+            // which once paid is a second real debit.
+            const updatedBill: Bill = {
+                ...action.payload,
+                recurringSourceId: action.payload.recurringSourceId ?? existingBill?.recurringSourceId,
+            }
 
             // If recurring was turned OFF, only delete FUTURE generated bills (keep current and past)
             if (existingBill?.isRecurring && !updatedBill.isRecurring) {
@@ -399,9 +251,7 @@ function reducer(state: AppState, action: Action): AppState {
                 const currentMonth = today.getMonth()
                 const currentYear = today.getFullYear()
 
-                return {
-                    ...state,
-                    bills: state.bills
+                const keptBills = state.bills
                         .filter((b) => {
                             // Keep bills that are NOT generated from this source
                             if (b.recurringSourceId !== updatedBill.id) return true
@@ -418,7 +268,23 @@ function reducer(state: AppState, action: Action): AppState {
                             // Delete future bills
                             return false
                         })
-                        .map((b) => (b.id === updatedBill.id ? updatedBill : b)), // Update the source bill
+                        .map((b) => (b.id === updatedBill.id ? updatedBill : b)) // Update the source bill
+
+                // Future bills can already have been paid (the UI lets you
+                // navigate ahead a month and pay), so dropping them only unlinks
+                // their expenses. Deleting a payment here would be worse than in
+                // DELETE_BILL: the user asked to stop recurring, not to erase a
+                // transaction, and the dialog promises nothing of the sort.
+                const keptBillIds = new Set(keptBills.map((b) => b.id))
+                const removedBillIds = new Set(
+                    state.bills.filter((b) => !keptBillIds.has(b.id)).map((b) => b.id),
+                )
+                return {
+                    ...state,
+                    bills: keptBills,
+                    expenses: state.expenses.map((e) =>
+                        e.billId && removedBillIds.has(e.billId) ? { ...e, billId: undefined } : e,
+                    ),
                 }
             }
 
@@ -430,67 +296,38 @@ function reducer(state: AppState, action: Action): AppState {
             }
         }
 
-        case 'DELETE_BILL': {
-            const billToDelete = state.bills.find((b) => b.id === action.payload)
-            const refundAccountId = billToDelete?.isPaid ? billToDelete.paidFromAccountId : undefined
-
+        case 'DELETE_BILL':
+            // A bill is a schedule annotation on a movement that really
+            // happened, so deleting it unlinks the expense and keeps it. Taking
+            // the expense along would un-spend the money — the very "balance
+            // jumps back up" class this refactor exists to kill — and the
+            // expense may well be one the user typed themselves (the expenses
+            // page stamps billId on bill-category expenses).
             return {
                 ...state,
                 bills: state.bills.filter((b) => b.id !== action.payload),
-                // Refund bill amount if it was paid
-                accounts: refundAccountId && billToDelete
-                    ? state.accounts.map((acc) =>
-                        acc.id === refundAccountId
-                            ? { ...acc, balance: acc.balance + billToDelete.amount }
-                            : acc
-                    )
-                    : state.accounts,
+                expenses: state.expenses.map((e) =>
+                    e.billId === action.payload ? { ...e, billId: undefined } : e,
+                ),
             }
-        }
 
         case 'PAY_BILL': {
-            const billToPay = state.bills.find((b) => b.id === action.payload.id)
-            const payAccountId = action.payload.accountId
-
-            return {
-                ...state,
-                bills: state.bills.map((b) =>
-                    b.id === action.payload.id
-                        ? { ...b, isPaid: true, paidDate: action.payload.paidDate, paidFromAccountId: action.payload.accountId }
-                        : b
-                ),
-                // Deduct bill amount from the paying account
-                accounts: payAccountId && billToPay
-                    ? state.accounts.map((acc) =>
-                        acc.id === payAccountId
-                            ? { ...acc, balance: acc.balance - billToPay.amount }
-                            : acc
-                    )
-                    : state.accounts,
-            }
+            // Paying a bill IS creating the expense — the bill is not touched,
+            // because "paid" is derived from the link, not stored on the bill.
+            const { billId, expense } = action.payload
+            // An already-paid bill re-paid (double click, two open tabs) would
+            // otherwise debit the account twice.
+            if (state.expenses.some((e) => e.billId === billId)) return state
+            return { ...state, expenses: [...state.expenses, { ...expense, billId }] }
         }
 
-        case 'UNPAY_BILL': {
-            const billToUnpay = state.bills.find((b) => b.id === action.payload)
-            const refundAccountId = billToUnpay?.paidFromAccountId
-
+        case 'UNPAY_BILL':
+            // Deleting the linked expense reverses the payment exactly, for the
+            // amount actually paid — editing the bill afterwards cannot inflate it.
             return {
                 ...state,
-                bills: state.bills.map((b) =>
-                    b.id === action.payload
-                        ? { ...b, isPaid: false, paidDate: undefined, paidFromAccountId: undefined }
-                        : b
-                ),
-                // Refund bill amount back to the account it was paid from
-                accounts: refundAccountId && billToUnpay
-                    ? state.accounts.map((acc) =>
-                        acc.id === refundAccountId
-                            ? { ...acc, balance: acc.balance + billToUnpay.amount }
-                            : acc
-                    )
-                    : state.accounts,
+                expenses: state.expenses.filter((e) => e.billId !== action.payload),
             }
-        }
 
         case 'GENERATE_RECURRING_BILLS': {
             const { month, year } = action.payload
@@ -570,7 +407,6 @@ function reducer(state: AppState, action: Action): AppState {
                             description: bill.description,
                             amount: bill.amount,
                             dueDate: targetDateISO,
-                            isPaid: false,
                             isRecurring: false, // Generated bills are NOT recurring sources
                             recurringSourceId: bill.id,
                             categoryId: bill.categoryId,
@@ -603,10 +439,8 @@ function reducer(state: AppState, action: Action): AppState {
             }
 
         case 'DELETE_CREDIT_CARD':
-            return {
-                ...state,
-                creditCards: state.creditCards.filter((c) => c.id !== action.payload),
-            }
+            // Cascade: the delete dialog already promises the statements go too.
+            return cascadeDelete(state, 'creditCard', action.payload)
 
         // Credit Card Statements
         case 'ADD_STATEMENT': {
@@ -637,210 +471,37 @@ function reducer(state: AppState, action: Action): AppState {
             return { ...state, savingsGoals: [...state.savingsGoals, action.payload] }
 
         case 'UPDATE_SAVINGS_GOAL':
-            {
-                const updatedGoals = state.savingsGoals.map((g) =>
+            return {
+                ...state,
+                savingsGoals: state.savingsGoals.map((g) =>
                     g.id === action.payload.id ? action.payload : g
-                )
-                const syncedGoals = updatedGoals.map((g) => {
-                    if (!g.linkedAccountId) return g
-                    const linkedAccount = state.accounts.find((a) => a.id === g.linkedAccountId)
-                    return linkedAccount ? { ...g, currentAmount: linkedAccount.balance } : g
-                })
-                return {
-                    ...state,
-                    savingsGoals: syncedGoals,
-                }
+                ),
             }
 
         case 'DELETE_SAVINGS_GOAL':
-            return {
-                ...state,
-                savingsGoals: state.savingsGoals.filter((g) => g.id !== action.payload),
-            }
+            // Cascade: the delete dialog already promises the contributions go too.
+            return cascadeDelete(state, 'savingsGoal', action.payload)
 
         // Savings Contributions
-        case 'ADD_SAVINGS_CONTRIBUTION': {
-            const contribution = action.payload
-            const fromAccountId = contribution.fromAccountId
-            const goal = state.savingsGoals.find((g) => g.id === contribution.savingsGoalId)
-            const linkedAccountId = goal?.linkedAccountId
+        // Savings contributions are plain records. Goal progress is derived from
+        // them (utils/balances#goalProgress), so these cases keep no running
+        // total on the goal — the running total was the drift.
+        case 'ADD_SAVINGS_CONTRIBUTION':
+            return { ...state, savingsContributions: [...state.savingsContributions, action.payload] }
 
-            let updatedAccounts = state.accounts
-
-            if (fromAccountId && fromAccountId !== linkedAccountId) {
-                updatedAccounts = updatedAccounts.map((acc) =>
-                    acc.id === fromAccountId
-                        ? { ...acc, balance: acc.balance - contribution.amount }
-                        : acc
-                )
-            }
-
-            if (linkedAccountId && linkedAccountId !== fromAccountId) {
-                updatedAccounts = updatedAccounts.map((acc) =>
-                    acc.id === linkedAccountId
-                        ? { ...acc, balance: acc.balance + contribution.amount }
-                        : acc
-                )
-            }
-
-            const updatedGoals = state.savingsGoals.map((g) =>
-                g.id === contribution.savingsGoalId && !g.linkedAccountId
-                    ? { ...g, currentAmount: g.currentAmount + contribution.amount }
-                    : g
-            )
-
-            const syncedGoals = updatedGoals.map((g) => {
-                if (!g.linkedAccountId) return g
-                const linkedAccount = updatedAccounts.find((a) => a.id === g.linkedAccountId)
-                return linkedAccount ? { ...g, currentAmount: linkedAccount.balance } : g
-            })
-
-            return {
-                ...state,
-                savingsContributions: [...state.savingsContributions, contribution],
-                // Deduct contribution amount from the source account
-                accounts: updatedAccounts,
-                savingsGoals: syncedGoals,
-            }
-        }
-
-        case 'UPDATE_SAVINGS_CONTRIBUTION': {
-            const updatedContribution = action.payload
-            const oldContribution = state.savingsContributions.find((c) => c.id === updatedContribution.id)
-            const oldAccountId = oldContribution?.fromAccountId
-            const newAccountId = updatedContribution.fromAccountId
-            const oldGoal = oldContribution
-                ? state.savingsGoals.find((g) => g.id === oldContribution.savingsGoalId)
-                : undefined
-            const newGoal = state.savingsGoals.find((g) => g.id === updatedContribution.savingsGoalId)
-            const oldLinkedAccountId = oldGoal?.linkedAccountId
-            const newLinkedAccountId = newGoal?.linkedAccountId
-
-            let updatedAccounts = state.accounts
-
-            // Refund the old account if it had one
-            if (oldAccountId && oldContribution && oldAccountId !== oldLinkedAccountId) {
-                updatedAccounts = updatedAccounts.map((acc) =>
-                    acc.id === oldAccountId
-                        ? { ...acc, balance: acc.balance + oldContribution.amount }
-                        : acc
-                )
-            }
-
-            // Remove from old linked account if applicable
-            if (oldLinkedAccountId && oldContribution && oldLinkedAccountId !== oldAccountId) {
-                updatedAccounts = updatedAccounts.map((acc) =>
-                    acc.id === oldLinkedAccountId
-                        ? { ...acc, balance: acc.balance - oldContribution.amount }
-                        : acc
-                )
-            }
-
-            // Deduct from the new account if specified
-            if (newAccountId && newAccountId !== newLinkedAccountId) {
-                updatedAccounts = updatedAccounts.map((acc) =>
-                    acc.id === newAccountId
-                        ? { ...acc, balance: acc.balance - updatedContribution.amount }
-                        : acc
-                )
-            }
-
-            // Add to new linked account if applicable
-            if (newLinkedAccountId && newLinkedAccountId !== newAccountId) {
-                updatedAccounts = updatedAccounts.map((acc) =>
-                    acc.id === newLinkedAccountId
-                        ? { ...acc, balance: acc.balance + updatedContribution.amount }
-                        : acc
-                )
-            }
-
-            // Update savings goals amounts (only for unlinked goals)
-            let updatedGoals = state.savingsGoals
-            if (oldContribution) {
-                if (oldContribution.savingsGoalId !== updatedContribution.savingsGoalId) {
-                    updatedGoals = state.savingsGoals.map((g) => {
-                        if (g.id === oldContribution.savingsGoalId && !g.linkedAccountId) {
-                            return { ...g, currentAmount: g.currentAmount - oldContribution.amount }
-                        }
-                        if (g.id === updatedContribution.savingsGoalId && !g.linkedAccountId) {
-                            return { ...g, currentAmount: g.currentAmount + updatedContribution.amount }
-                        }
-                        return g
-                    })
-                } else {
-                    const diff = updatedContribution.amount - oldContribution.amount
-                    updatedGoals = state.savingsGoals.map((g) =>
-                        g.id === updatedContribution.savingsGoalId && !g.linkedAccountId
-                            ? { ...g, currentAmount: g.currentAmount + diff }
-                            : g
-                    )
-                }
-            }
-
-            const syncedGoals = updatedGoals.map((g) => {
-                if (!g.linkedAccountId) return g
-                const linkedAccount = updatedAccounts.find((a) => a.id === g.linkedAccountId)
-                return linkedAccount ? { ...g, currentAmount: linkedAccount.balance } : g
-            })
-
+        case 'UPDATE_SAVINGS_CONTRIBUTION':
             return {
                 ...state,
                 savingsContributions: state.savingsContributions.map((c) =>
-                    c.id === updatedContribution.id ? updatedContribution : c
+                    c.id === action.payload.id ? action.payload : c
                 ),
-                accounts: updatedAccounts,
-                savingsGoals: syncedGoals,
-            }
-        }
-
-        case 'DELETE_SAVINGS_CONTRIBUTION': {
-            const contributionToDelete = state.savingsContributions.find((c) => c.id === action.payload)
-            const refundAccountId = contributionToDelete?.fromAccountId
-            const goal = contributionToDelete
-                ? state.savingsGoals.find((g) => g.id === contributionToDelete.savingsGoalId)
-                : undefined
-            const linkedAccountId = goal?.linkedAccountId
-
-            let updatedAccounts = state.accounts
-
-            if (refundAccountId && contributionToDelete && refundAccountId !== linkedAccountId) {
-                updatedAccounts = updatedAccounts.map((acc) =>
-                    acc.id === refundAccountId
-                        ? { ...acc, balance: acc.balance + contributionToDelete.amount }
-                        : acc
-                )
             }
 
-            if (linkedAccountId && contributionToDelete && linkedAccountId !== refundAccountId) {
-                updatedAccounts = updatedAccounts.map((acc) =>
-                    acc.id === linkedAccountId
-                        ? { ...acc, balance: acc.balance - contributionToDelete.amount }
-                        : acc
-                )
-            }
-
-            const updatedGoalsAfterDelete = contributionToDelete
-                ? state.savingsGoals.map((g) =>
-                    g.id === contributionToDelete.savingsGoalId && !g.linkedAccountId
-                        ? { ...g, currentAmount: g.currentAmount - contributionToDelete.amount }
-                        : g
-                )
-                : state.savingsGoals
-
-            const syncedGoals = updatedGoalsAfterDelete.map((g) => {
-                if (!g.linkedAccountId) return g
-                const linkedAccount = updatedAccounts.find((a) => a.id === g.linkedAccountId)
-                return linkedAccount ? { ...g, currentAmount: linkedAccount.balance } : g
-            })
-
+        case 'DELETE_SAVINGS_CONTRIBUTION':
             return {
                 ...state,
                 savingsContributions: state.savingsContributions.filter((c) => c.id !== action.payload),
-                // Refund contribution amount back to the source account
-                accounts: updatedAccounts,
-                savingsGoals: syncedGoals,
             }
-        }
 
         // Monthly Budget
         case 'SET_MONTHLY_BUDGET':
@@ -858,19 +519,38 @@ function reducer(state: AppState, action: Action): AppState {
 
         // Import
         case 'IMPORT_DATA': {
-            const newState = { ...state }
-            if (action.payload.categories) newState.categories = [...state.categories, ...action.payload.categories]
-            if (action.payload.accounts) newState.accounts = [...state.accounts, ...action.payload.accounts]
-            if (action.payload.incomes) newState.incomes = [...state.incomes, ...action.payload.incomes]
-            if (action.payload.expenses) newState.expenses = [...state.expenses, ...action.payload.expenses]
-            if (action.payload.bills) newState.bills = [...state.bills, ...action.payload.bills]
-            if (action.payload.creditCards) newState.creditCards = [...state.creditCards, ...action.payload.creditCards]
-            if (action.payload.creditCardStatements)
-                newState.creditCardStatements = [...state.creditCardStatements, ...action.payload.creditCardStatements]
-            if (action.payload.savingsGoals) newState.savingsGoals = [...state.savingsGoals, ...action.payload.savingsGoals]
-            if (action.payload.savingsContributions)
-                newState.savingsContributions = [...state.savingsContributions, ...action.payload.savingsContributions]
-            return newState
+            // A restore is externally controlled JSON that may predate the
+            // current schema, so it goes through the SAME migration the stored
+            // blob does rather than a second, drifting copy of it. That is what
+            // turns a pre-branch account carrying `{ balance: 700 }` into a real
+            // `openingBalance` — imported verbatim it was `undefined`, which
+            // reads as 0 and drops every effect on that account.
+            //
+            // Defaults are deliberately not seeded: this MERGES into a state
+            // that already has accounts and categories.
+            let imported: AppState
+            try {
+                imported = migrate(action.payload, { seedMissingDefaults: false })
+            } catch {
+                // Nothing recognisable in the payload. A reducer must not throw
+                // — the caller validated the envelope, not its contents — and
+                // importing nothing is what this did before.
+                return state
+            }
+
+            // Every collection, by an exhaustive key list rather than one
+            // `if (payload.X)` per collection. That hand-maintained list is how
+            // `transfers` and `monthlyBudgets` came to be silently discarded on
+            // restore; a collection added to AppState now fails to compile in
+            // utils/backup.ts instead.
+            const merged: AppState = { ...state }
+            for (const key of COLLECTION_KEYS) {
+                // One localised cast: the compiler will not relate two indexed
+                // accesses through a union key, though both index the same
+                // interface with the same key.
+                ;(merged as unknown as Record<string, unknown[]>)[key] = [...state[key], ...imported[key]]
+            }
+            return merged
         }
 
         default:
@@ -881,17 +561,40 @@ function reducer(state: AppState, action: Action): AppState {
 type BudgetContextType = {
     state: AppState
     isLoading: boolean
+    /**
+     * The derived live balance of one account: openingBalance + every recorded
+     * effect. Deliberately the ONLY balance reader on the context — a
+     * `Record<string, number>` was also exposed, and every consumer of it wrote
+     * `balances[id] ?? 0`, which resolves an unknown id of `'constructor'` or
+     * `'toString'` through Object.prototype and returns a function.
+     */
+    balanceOf: (accountId: string) => number
+    /** Derived goal progress: the linked account's balance, or Σ contributions. */
+    progressOfGoal: (goal: SavingsGoal) => number
     // Categories
     addCategory: (category: Omit<Category, 'id'>) => void
     updateCategory: (category: Category) => void
-    deleteCategory: (id: string) => void
+    /**
+     * Blocked when records still reference the category: returns the typed
+     * failure so the caller can show the reason instead of a false success.
+     */
+    deleteCategory: (id: string) => DeleteCheck
     getCategoryById: (id: string) => Category | undefined
     // Accounts
     addAccount: (account: Omit<Account, 'id'>) => void
     updateAccount: (account: Account) => void
-    deleteAccount: (id: string) => void
-    updateAccountBalance: (id: string, amount: number, operation: 'add' | 'subtract') => void
-    transferFunds: (fromAccountId: string, toAccountId: string, amount: number) => void
+    /** Same contract as deleteCategory: a blocked delete explains itself. */
+    deleteAccount: (id: string) => DeleteCheck
+    /** The one definition of "in use", shared with the reducer. */
+    canDeleteAccount: (id: string) => DeleteCheck
+    canDeleteCategory: (id: string) => DeleteCheck
+    transferFunds: (transfer: Omit<Transfer, 'id'>) => void
+    /**
+     * The only way to correct a transfer. Without it a mistyped transfer is
+     * permanent AND both of its accounts are permanently undeletable, because
+     * `checkDelete` counts a transfer as a reference to each.
+     */
+    deleteTransfer: (id: string) => void
     // Income
     addIncome: (income: Omit<Income, 'id'>) => void
     updateIncome: (income: Income) => void
@@ -901,11 +604,18 @@ type BudgetContextType = {
     updateExpense: (expense: Expense) => void
     deleteExpense: (id: string) => void
     // Bills
-    addBill: (bill: Omit<Bill, 'id'>) => void
+    /** Returns the new bill's id, so a caller can link an expense to it. */
+    addBill: (bill: Omit<Bill, 'id'>) => string
     updateBill: (bill: Bill) => void
     deleteBill: (id: string) => void
-    payBill: (id: string, paidDate: string, accountId: string) => void
+    /**
+     * The one and only way to pay a bill: it creates the linked expense.
+     * Returns false if the bill was already paid and nothing happened.
+     */
+    payBill: (bill: Bill, accountId: string) => boolean
     unpayBill: (id: string) => void
+    /** Derived: a bill is paid exactly when a linked expense exists. */
+    isBillPaid: (billId: string) => boolean
     generateRecurringBills: (month: number, year: number) => void
     // Credit Cards
     addCreditCard: (card: Omit<CreditCard, 'id'>) => void
@@ -936,9 +646,10 @@ const BudgetContext = createContext<BudgetContextType | undefined>(undefined)
 
 // Provider
 export function BudgetProvider({ children }: { children: React.ReactNode }) {
-    const [state, dispatch] = useReducer(reducer, initialState)
+    const [state, dispatch] = useReducer(budgetReducer, initialState)
     const [isLoading, setIsLoading] = React.useState(true)
     const [isInitialized, setIsInitialized] = React.useState(false)
+    const loadFailedRef = useRef(false)
 
     // Load from localStorage on mount
     useEffect(() => {
@@ -946,28 +657,24 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
             const stored = localStorage.getItem(STORAGE_KEY)
             console.log('Loading from localStorage:', stored ? 'Data found' : 'No data found')
             if (stored) {
-                const parsedState = JSON.parse(stored) as AppState
-                // Ensure accounts array exists (migration for existing users)
-                if (!parsedState.accounts) {
-                    parsedState.accounts = defaultAccounts.map(a => ({ ...a, id: uuidv4() }))
+                const parsed = JSON.parse(stored)
+                if (parsed?.schemaVersion !== CURRENT_SCHEMA_VERSION) {
+                    // One-time, never overwritten: the escape hatch if migration is wrong.
+                    if (!localStorage.getItem(V1_BACKUP_KEY)) {
+                        localStorage.setItem(V1_BACKUP_KEY, stored)
+                    }
                 }
-                dispatch({ type: 'LOAD_STATE', payload: parsedState })
-                console.log('Loaded state with', parsedState.incomes?.length || 0, 'incomes')
+                const migratedState = migrate(parsed)
+                dispatch({ type: 'LOAD_STATE', payload: migratedState })
+                console.log('Loaded state with', migratedState.incomes?.length || 0, 'incomes')
             } else {
                 // Initialize with default categories and accounts
-                const defaultCategories: Category[] = [
-                    ...defaultIncomeCategories.map((c) => ({ ...c, id: uuidv4() })),
-                    ...defaultExpenseCategories.map((c) => ({ ...c, id: uuidv4() })),
-                ]
-                const defaultAccountsList: Account[] = defaultAccounts.map(a => ({ ...a, id: uuidv4() }))
-                dispatch({
-                    type: 'LOAD_STATE',
-                    payload: { ...initialState, categories: defaultCategories, accounts: defaultAccountsList },
-                })
+                dispatch({ type: 'LOAD_STATE', payload: seedState() })
                 console.log('Initialized with default categories and accounts')
             }
         } catch (error) {
             console.error('Error loading state from localStorage:', error)
+            loadFailedRef.current = true
         } finally {
             setIsLoading(false)
             setIsInitialized(true)
@@ -976,6 +683,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
     // Save to localStorage on state change - only after initialization
     useEffect(() => {
+        if (loadFailedRef.current) return // never overwrite data we could not read
         if (isInitialized && !isLoading) {
             try {
                 localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
@@ -986,6 +694,18 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         }
     }, [state, isLoading, isInitialized])
 
+    // Derived balances — the single source of truth for "how much is in this account".
+    // A Map, and only a Map: the record form used to be exposed too, and every
+    // consumer reached for `balances[id] ?? 0`, where an unknown id of
+    // 'constructor'/'toString' resolves through Object.prototype and returns a
+    // function instead of falling through to 0.
+    const balanceMap = useMemo(() => computeBalanceMap(state), [state])
+    const balanceOf = useCallback((accountId: string) => balanceMap.get(accountId) ?? 0, [balanceMap])
+    const progressOfGoal = useCallback(
+        (goal: SavingsGoal) => goalProgress(state, goal),
+        [state],
+    )
+
     // Category functions
     const addCategory = useCallback((category: Omit<Category, 'id'>) => {
         dispatch({ type: 'ADD_CATEGORY', payload: { ...category, id: uuidv4() } })
@@ -995,9 +715,42 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         dispatch({ type: 'UPDATE_CATEGORY', payload: category })
     }, [])
 
-    const deleteCategory = useCallback((id: string) => {
-        dispatch({ type: 'DELETE_CATEGORY', payload: id })
-    }, [])
+    // Only the collections the integrity check reads — not `accounts`,
+    // `categories`, `monthlyBudgets` or `settings` — so the delete callbacks
+    // keep their identity when unrelated parts of the state change.
+    const integrityRefs = useMemo(
+        () => ({
+            incomes: state.incomes,
+            expenses: state.expenses,
+            bills: state.bills,
+            transfers: state.transfers,
+            savingsContributions: state.savingsContributions,
+            creditCardStatements: state.creditCardStatements,
+            savingsGoals: state.savingsGoals,
+        }),
+        [
+            state.incomes,
+            state.expenses,
+            state.bills,
+            state.transfers,
+            state.savingsContributions,
+            state.creditCardStatements,
+            state.savingsGoals,
+        ],
+    )
+
+    const canDeleteCategory = useCallback(
+        (id: string) => checkDelete(integrityRefs, 'category', id),
+        [integrityRefs],
+    )
+
+    // The reducer would silently keep the category; returning the check makes
+    // the refusal visible to the caller instead of a no-op with a success toast.
+    const deleteCategory = useCallback((id: string): DeleteCheck => {
+        const check = checkDelete(integrityRefs, 'category', id)
+        if (check.allowed) dispatch({ type: 'DELETE_CATEGORY', payload: id })
+        return check
+    }, [integrityRefs])
 
     const getCategoryById = useCallback(
         (id: string) => state.categories.find((c) => c.id === id),
@@ -1013,16 +766,23 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         dispatch({ type: 'UPDATE_ACCOUNT', payload: account })
     }, [])
 
-    const deleteAccount = useCallback((id: string) => {
-        dispatch({ type: 'DELETE_ACCOUNT', payload: id })
+    const canDeleteAccount = useCallback(
+        (id: string) => checkDelete(integrityRefs, 'account', id),
+        [integrityRefs],
+    )
+
+    const deleteAccount = useCallback((id: string): DeleteCheck => {
+        const check = checkDelete(integrityRefs, 'account', id)
+        if (check.allowed) dispatch({ type: 'DELETE_ACCOUNT', payload: id })
+        return check
+    }, [integrityRefs])
+
+    const transferFunds = useCallback((transfer: Omit<Transfer, 'id'>) => {
+        dispatch({ type: 'TRANSFER_FUNDS', payload: { ...transfer, id: uuidv4() } })
     }, [])
 
-    const updateAccountBalance = useCallback((id: string, amount: number, operation: 'add' | 'subtract') => {
-        dispatch({ type: 'UPDATE_ACCOUNT_BALANCE', payload: { id, amount, operation } })
-    }, [])
-
-    const transferFunds = useCallback((fromAccountId: string, toAccountId: string, amount: number) => {
-        dispatch({ type: 'TRANSFER_FUNDS', payload: { fromAccountId, toAccountId, amount } })
+    const deleteTransfer = useCallback((id: string) => {
+        dispatch({ type: 'DELETE_TRANSFER', payload: id })
     }, [])
 
     // Income functions
@@ -1053,7 +813,9 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
     // Bill functions
     const addBill = useCallback((bill: Omit<Bill, 'id'>) => {
-        dispatch({ type: 'ADD_BILL', payload: { ...bill, id: uuidv4() } })
+        const id = uuidv4()
+        dispatch({ type: 'ADD_BILL', payload: { ...bill, id } })
+        return id
     }, [])
 
     const updateBill = useCallback((bill: Bill) => {
@@ -1064,9 +826,21 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         dispatch({ type: 'DELETE_BILL', payload: id })
     }, [])
 
-    const payBill = useCallback((id: string, paidDate: string, accountId: string) => {
-        dispatch({ type: 'PAY_BILL', payload: { id, paidDate, accountId } })
-    }, [])
+    const paidBillIds = useMemo(
+        () => new Set(state.expenses.map((e) => e.billId).filter(Boolean) as string[]),
+        [state.expenses],
+    )
+    const isBillPaid = useCallback((billId: string) => paidBillIds.has(billId), [paidBillIds])
+
+    // The single payment path. Every UI that pays a bill goes through here, so
+    // the bills page and the dashboard cannot produce different results.
+    // Returns false when the reducer's double-pay guard would swallow the
+    // payment, so callers do not announce success for a no-op.
+    const payBill = useCallback((bill: Bill, accountId: string) => {
+        if (paidBillIds.has(bill.id)) return false
+        dispatch({ type: 'PAY_BILL', payload: { billId: bill.id, expense: buildBillExpense(bill, accountId) } })
+        return true
+    }, [paidBillIds])
 
     const unpayBill = useCallback((id: string) => {
         dispatch({ type: 'UNPAY_BILL', payload: id })
@@ -1150,15 +924,19 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     const value: BudgetContextType = {
         state,
         isLoading,
+        balanceOf,
+        progressOfGoal,
         addCategory,
         updateCategory,
         deleteCategory,
+        canDeleteCategory,
         getCategoryById,
         addAccount,
         updateAccount,
         deleteAccount,
-        updateAccountBalance,
+        canDeleteAccount,
         transferFunds,
+        deleteTransfer,
         addIncome,
         updateIncome,
         deleteIncome,
@@ -1170,6 +948,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         deleteBill,
         payBill,
         unpayBill,
+        isBillPaid,
         generateRecurringBills,
         addCreditCard,
         updateCreditCard,

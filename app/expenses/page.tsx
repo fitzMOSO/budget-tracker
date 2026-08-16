@@ -34,7 +34,7 @@ const EXPENSE_TYPES = [
 ]
 
 export default function ExpensesPage() {
-    const { state, addExpense, updateExpense, deleteExpense, addBill, payBill, isLoading } = useBudget()
+    const { state, balanceOf, addExpense, updateExpense, deleteExpense, addBill, isLoading } = useBudget()
     const { month: currentMonth, year: currentYear } = getMonthYear()
     const [selectedMonth, setSelectedMonth] = useState(currentMonth)
     const [selectedYear, setSelectedYear] = useState(currentYear)
@@ -134,28 +134,29 @@ export default function ExpensesPage() {
         }
 
         if (editingExpense) {
-            updateExpense({ ...expenseData, id: editingExpense.id })
+            // billId is carried explicitly even though UPDATE_EXPENSE also
+            // preserves it: this form has no field for it, and dropping it
+            // un-pays the linked bill, which re-opens the double debit.
+            updateExpense({ ...expenseData, id: editingExpense.id, billId: editingExpense.billId })
             showSuccess('Expense updated successfully!')
         } else {
-            addExpense(expenseData)
-
-            // Check if category is marked as a bill category - if so, also create a paid bill
+            // Check if category is marked as a bill category - if so, also record a bill
             const selectedCategory = state.categories.find((c: Category) => c.id === formData.categoryId)
             if (selectedCategory?.isBill) {
-                // Create a bill that's already marked as paid with expense tracking
-                addBill({
+                // The bill shows as paid because THIS expense is linked to it —
+                // no second expense and no stored isPaid flag are involved.
+                const billId = addBill({
                     description: formData.description,
                     amount: parseFloat(formData.amount),
                     dueDate: formData.date,
-                    isPaid: true,
-                    paidDate: formData.date,
-                    paidFromAccountId: formData.accountId,
                     isRecurring: false,
                     categoryId: formData.categoryId,
                     notes: `Auto-created from expense`,
                 })
+                addExpense({ ...expenseData, billId })
                 showSuccess('Expense added and bill recorded!')
             } else {
+                addExpense(expenseData)
                 showSuccess('Expense added successfully!')
             }
         }
@@ -404,7 +405,7 @@ export default function ExpensesPage() {
                         onChange={(e) => setFormData({ ...formData, accountId: e.target.value })}
                         options={state.accounts.map((a: Account) => ({
                             value: a.id,
-                            label: `${a.name} (${formatCurrency(a.balance, state.settings)})`
+                            label: `${a.name} (${formatCurrency(balanceOf(a.id), state.settings)})`
                         }))}
                         placeholder="Select account"
                         required

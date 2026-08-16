@@ -24,8 +24,10 @@ import {
     getMonthYear,
     getTodayISO,
     calculateCreditCardBalance,
+    isValidAmount,
+    INVALID_AMOUNT_MESSAGE,
 } from '../utils'
-import { showSuccess, showDeleteConfirm } from '../utils/swal'
+import { showSuccess, showDeleteConfirm, showError } from '../utils/swal'
 import type { CreditCard, CreditCardStatement, PaymentStatus, Account } from '../types'
 
 const CARD_COLORS = [
@@ -49,6 +51,7 @@ const STATUS_OPTIONS = [
 export default function CreditCardsPage() {
     const {
         state,
+        balanceOf,
         addCreditCard,
         updateCreditCard,
         deleteCreditCard,
@@ -178,7 +181,7 @@ export default function CreditCardsPage() {
     const handleDeleteCard = async (card: CreditCard) => {
         const confirmed = await showDeleteConfirm(
             `${card.bank} - ${card.cardType}`,
-            'This will also delete all statements for this card.'
+            'This will also delete every statement for this card. The accounts those payments came from return to what they were before them.'
         )
         if (confirmed) {
             deleteCreditCard(card.id)
@@ -266,7 +269,18 @@ export default function CreditCardsPage() {
         }
 
         if (editingStatement) {
-            updateStatement({ ...statementData, id: editingStatement.id })
+            // Same wholesale-replace trap: the form has no paidDate field, so
+            // without carrying it over, editing a note erases when the card was
+            // actually paid (the Excel report is the only place it shows).
+            // Carried only while the statement still records a payment, though:
+            // editing one back to pending or overdue must not leave behind the
+            // date of a payment it no longer claims.
+            const stillPaid = statementData.status === 'paid' || statementData.status === 'partial'
+            updateStatement({
+                ...statementData,
+                id: editingStatement.id,
+                paidDate: stillPaid ? editingStatement.paidDate : undefined,
+            })
             showSuccess('Statement updated!')
         } else {
             addStatement(statementData)
@@ -277,7 +291,13 @@ export default function CreditCardsPage() {
     }
 
     const handleDeleteStatement = async (statement: CreditCardStatement) => {
-        const confirmed = await showDeleteConfirm('this statement')
+        // The amount paid is an effect on the account it was paid from, so
+        // deleting the statement moves that balance — say so, as the transfer
+        // dialog does, rather than presenting this as a records-only delete.
+        const confirmed = await showDeleteConfirm(
+            'this statement',
+            'The account it was paid from returns to what it was before the payment.',
+        )
         if (confirmed) {
             deleteStatement(statement.id)
             showSuccess('Statement deleted!')
@@ -305,6 +325,11 @@ export default function CreditCardsPage() {
         if (!paymentStatement) return
 
         const additionalPayment = parseFloat(paymentAmount)
+        if (!isValidAmount(additionalPayment)) {
+            showError(INVALID_AMOUNT_MESSAGE)
+            return
+        }
+
         const newAmountPaid = paymentStatement.amountPaid + additionalPayment
         const newBalance = paymentStatement.statementBalance - newAmountPaid
 
@@ -772,7 +797,7 @@ export default function CreditCardsPage() {
                             }
                             options={state.accounts.map((a) => ({
                                 value: a.id,
-                                label: `${a.name} (${formatCurrency(a.balance, state.settings)})`
+                                label: `${a.name} (${formatCurrency(balanceOf(a.id), state.settings)})`
                             }))}
                             placeholder="Select account"
                         />
@@ -951,7 +976,7 @@ export default function CreditCardsPage() {
                             onChange={(e) => setPaymentAccountId(e.target.value)}
                             options={state.accounts.map((a: Account) => ({
                                 value: a.id,
-                                label: `${a.name} (${formatCurrency(a.balance, state.settings)})`
+                                label: `${a.name} (${formatCurrency(balanceOf(a.id), state.settings)})`
                             }))}
                             placeholder="Select account"
                             required

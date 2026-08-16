@@ -4,11 +4,11 @@ import React, { useState } from 'react'
 import { TrendingUp, TrendingDown, ArrowLeftRight, Plus } from 'lucide-react'
 import { Modal, Input, Select, Button } from './ui'
 import { useBudget } from '../context/BudgetContext'
-import { formatCurrency, getTodayISO } from '../utils'
+import { formatCurrency, getTodayISO, isValidAmount, INVALID_AMOUNT_MESSAGE } from '../utils'
 import { showSuccess, showError } from '../utils/swal'
 
 export function QuickActions() {
-    const { state, transferFunds, addIncome, addExpense } = useBudget()
+    const { state, balanceOf, transferFunds, addIncome, addExpense } = useBudget()
 
     const [isMenuOpen, setIsMenuOpen] = useState(false)
     const [isTransferModalOpen, setIsTransferModalOpen] = useState(false)
@@ -74,18 +74,23 @@ export function QuickActions() {
         }
 
         const amount = parseFloat(transferData.amount)
-        if (amount <= 0) {
-            showError('Amount must be greater than 0')
+        if (!isValidAmount(amount)) {
+            showError(INVALID_AMOUNT_MESSAGE)
             return
         }
 
         const fromAccount = state.accounts.find(a => a.id === transferData.fromAccountId)
-        if (fromAccount && fromAccount.balance < amount) {
+        if (fromAccount && balanceOf(fromAccount.id) < amount) {
             showError('Insufficient balance in source account')
             return
         }
 
-        transferFunds(transferData.fromAccountId, transferData.toAccountId, amount)
+        transferFunds({
+            fromAccountId: transferData.fromAccountId,
+            toAccountId: transferData.toAccountId,
+            amount,
+            date: getTodayISO(),
+        })
         showSuccess('Transfer completed successfully!')
         handleCloseTransferModal()
     }
@@ -114,8 +119,8 @@ export function QuickActions() {
         e.preventDefault()
 
         const amount = parseFloat(quickIncomeData.amount)
-        if (amount <= 0) {
-            showError('Amount must be greater than 0')
+        if (!isValidAmount(amount)) {
+            showError(INVALID_AMOUNT_MESSAGE)
             return
         }
 
@@ -160,8 +165,8 @@ export function QuickActions() {
         e.preventDefault()
 
         const amount = parseFloat(quickExpenseData.amount)
-        if (amount <= 0) {
-            showError('Amount must be greater than 0')
+        if (!isValidAmount(amount)) {
+            showError(INVALID_AMOUNT_MESSAGE)
             return
         }
 
@@ -254,7 +259,7 @@ export function QuickActions() {
                         onChange={(e) => setTransferData({ ...transferData, fromAccountId: e.target.value })}
                         options={state.accounts.map((a) => ({
                             value: a.id,
-                            label: `${a.name} (${formatCurrency(a.balance, state.settings)})`,
+                            label: `${a.name} (${formatCurrency(balanceOf(a.id), state.settings)})`,
                         }))}
                         required
                     />
@@ -267,7 +272,7 @@ export function QuickActions() {
                             .filter((a) => a.id !== transferData.fromAccountId)
                             .map((a) => ({
                                 value: a.id,
-                                label: `${a.name} (${formatCurrency(a.balance, state.settings)})`,
+                                label: `${a.name} (${formatCurrency(balanceOf(a.id), state.settings)})`,
                             }))}
                         required
                     />
@@ -345,7 +350,7 @@ export function QuickActions() {
                         onChange={(e) => setQuickIncomeData({ ...quickIncomeData, accountId: e.target.value })}
                         options={state.accounts.map((a) => ({
                             value: a.id,
-                            label: `${a.name} (${formatCurrency(a.balance, state.settings)})`,
+                            label: `${a.name} (${formatCurrency(balanceOf(a.id), state.settings)})`,
                         }))}
                         required
                     />
@@ -414,7 +419,7 @@ export function QuickActions() {
                         onChange={(e) => setQuickExpenseData({ ...quickExpenseData, accountId: e.target.value })}
                         options={state.accounts.map((a) => ({
                             value: a.id,
-                            label: `${a.name} (${formatCurrency(a.balance, state.settings)})`,
+                            label: `${a.name} (${formatCurrency(balanceOf(a.id), state.settings)})`,
                         }))}
                         required
                     />
