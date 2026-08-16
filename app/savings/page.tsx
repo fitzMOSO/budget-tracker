@@ -155,7 +155,14 @@ export default function SavingsPage() {
     }
 
     const handleDeleteGoal = async (goal: SavingsGoal) => {
-        const confirmed = await showDeleteConfirm(goal.name, 'This will also delete all contributions to this goal.')
+        // Say that balances move, the way the transfer dialog does. Every
+        // contribution is an effect on the account it came from (and on the
+        // linked account, if there is one), so this cascade is not only a
+        // records delete — the user will watch account balances change.
+        const confirmed = await showDeleteConfirm(
+            goal.name,
+            'This will also delete every contribution to this goal. The accounts they moved money between return to what they were before them.',
+        )
         if (confirmed) {
             deleteSavingsGoal(goal.id)
             showSuccess('Savings goal deleted!')

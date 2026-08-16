@@ -181,7 +181,7 @@ export default function CreditCardsPage() {
     const handleDeleteCard = async (card: CreditCard) => {
         const confirmed = await showDeleteConfirm(
             `${card.bank} - ${card.cardType}`,
-            'This will also delete all statements for this card.'
+            'This will also delete every statement for this card. The accounts those payments came from return to what they were before them.'
         )
         if (confirmed) {
             deleteCreditCard(card.id)
@@ -283,7 +283,13 @@ export default function CreditCardsPage() {
     }
 
     const handleDeleteStatement = async (statement: CreditCardStatement) => {
-        const confirmed = await showDeleteConfirm('this statement')
+        // The amount paid is an effect on the account it was paid from, so
+        // deleting the statement moves that balance — say so, as the transfer
+        // dialog does, rather than presenting this as a records-only delete.
+        const confirmed = await showDeleteConfirm(
+            'this statement',
+            'The account it was paid from returns to what it was before the payment.',
+        )
         if (confirmed) {
             deleteStatement(statement.id)
             showSuccess('Statement deleted!')

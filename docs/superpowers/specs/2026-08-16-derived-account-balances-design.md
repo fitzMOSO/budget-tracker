@@ -107,8 +107,10 @@ Deriving balances removes the *money* consequence of orphans. What remains is ma
 |---|---|---|
 | Credit card | statements | cascade — the dialog already promises this |
 | Savings goal | contributions | cascade — ditto |
-| Account | incomes, expenses, transfers, contributions | block if referenced |
+| Account | incomes, expenses, transfers, contributions, credit card statements (paid from), savings goals (linked account) | block if referenced |
 | Category | expenses, incomes, bills | block if referenced |
+
+The account row is exactly the set of records the effect table above can name an account in, plus one: a savings goal's `linkedAccountId` produces no effect of its own, but every contribution to that goal gives the linked account a `+amount`, so deleting the account would strand those effects and make the goal report 0 with no way to see why. A credit card statement's `paidFromAccountId` carries a `−amountPaid` effect directly. Both are counted by the guard; this table was the thing that was out of date.
 
 Bills are deliberately absent from the account row: once a bill no longer moves money, `Bill.paidFromAccountId` is redundant with the linked expense's `accountId` and is dropped during migration. An account referenced only by a bill payment is therefore protected via that expense.
 

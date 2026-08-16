@@ -73,6 +73,12 @@ export function computeBalanceMap(state: AppState): Map<string, number> {
     return balances
 }
 
+/**
+ * KEEP. Test-only by design, not dead code: this is the serialisable form of
+ * the balance map and the subject of the property test's oracle, which compares
+ * whole balance snapshots. Runtime code must use `computeBalanceMap`/`balanceOf`
+ * — see the warning on `balanceOf` for what a bracket read costs.
+ */
 export function computeBalances(state: AppState): Record<string, number> {
     return Object.fromEntries(computeBalanceMap(state))
 }
@@ -150,6 +156,11 @@ export function linkedBillExpense(state: AppState, billId: string): Expense | un
  * "Paid" is derived, never stored: a bill is paid exactly when a linked expense
  * exists. A stored flag alongside the link would be a second source of truth for
  * one fact, which is how the old code could unpay a bill and mint money.
+ *
+ * KEEP. Its callers are tests plus the two sites that inline the same Set for a
+ * whole collection; it is the executable statement of what "paid" means, and
+ * deleting it would leave that definition existing only as duplicated inline
+ * code.
  */
 export function isPaidBill(state: AppState, billId: string): boolean {
     return state.expenses.some((e) => e.billId === billId)
