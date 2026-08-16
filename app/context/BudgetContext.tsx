@@ -526,8 +526,13 @@ export function budgetReducer(state: AppState, action: Action): AppState {
 type BudgetContextType = {
     state: AppState
     isLoading: boolean
-    /** Derived live balances by account id: openingBalance + every recorded effect. */
-    balances: Record<string, number>
+    /**
+     * The derived live balance of one account: openingBalance + every recorded
+     * effect. Deliberately the ONLY balance reader on the context — a
+     * `Record<string, number>` was also exposed, and every consumer of it wrote
+     * `balances[id] ?? 0`, which resolves an unknown id of `'constructor'` or
+     * `'toString'` through Object.prototype and returns a function.
+     */
     balanceOf: (accountId: string) => number
     /** Derived goal progress: the linked account's balance, or Σ contributions. */
     progressOfGoal: (goal: SavingsGoal) => number
@@ -655,11 +660,11 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     }, [state, isLoading, isInitialized])
 
     // Derived balances — the single source of truth for "how much is in this account".
-    // The Map is the primitive; the record is the render-friendly view of it.
-    // `balances[id] ?? 0` on the record would resolve an unknown id of
-    // 'constructor'/'toString' through Object.prototype and return a function.
+    // A Map, and only a Map: the record form used to be exposed too, and every
+    // consumer reached for `balances[id] ?? 0`, where an unknown id of
+    // 'constructor'/'toString' resolves through Object.prototype and returns a
+    // function instead of falling through to 0.
     const balanceMap = useMemo(() => computeBalanceMap(state), [state])
-    const balances = useMemo(() => Object.fromEntries(balanceMap), [balanceMap])
     const balanceOf = useCallback((accountId: string) => balanceMap.get(accountId) ?? 0, [balanceMap])
     const progressOfGoal = useCallback(
         (goal: SavingsGoal) => goalProgress(state, goal),
@@ -884,7 +889,6 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     const value: BudgetContextType = {
         state,
         isLoading,
-        balances,
         balanceOf,
         progressOfGoal,
         addCategory,

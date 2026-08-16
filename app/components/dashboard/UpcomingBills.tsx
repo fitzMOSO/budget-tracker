@@ -11,11 +11,13 @@ interface UpcomingBillsProps {
     settings: AppSettings
     accounts: Account[]
     /**
-     * Derived balances by account id; account.openingBalance is NOT the live
-     * balance. Required alongside `accounts`: defaulting it to {} rendered every
-     * balance as 0 whenever a caller forgot to pass it.
+     * Derived balance for one account; account.openingBalance is NOT the live
+     * balance. A function rather than a `Record<string, number>` because a
+     * bracket read of an unknown id resolves through Object.prototype. Required
+     * alongside `accounts`: defaulting it rendered every balance as 0 whenever a
+     * caller forgot to pass it.
      */
-    balances: Record<string, number>
+    balanceOf: (accountId: string) => number
     /** Derived: a bill is paid exactly when a linked expense exists. */
     isBillPaid: (billId: string) => boolean
     /**
@@ -25,7 +27,7 @@ interface UpcomingBillsProps {
     onPayBill?: (bill: Bill, accountId: string) => boolean
 }
 
-export function UpcomingBills({ bills, settings, accounts, balances, isBillPaid, onPayBill }: UpcomingBillsProps) {
+export function UpcomingBills({ bills, settings, accounts, balanceOf, isBillPaid, onPayBill }: UpcomingBillsProps) {
     const sortedBills = [...bills]
         .filter((b) => !isBillPaid(b.id))
         .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
@@ -36,7 +38,7 @@ export function UpcomingBills({ bills, settings, accounts, balances, isBillPaid,
 
         const result = await showPaymentDialog(
             `Pay ${bill.description}?`,
-            accounts.map(acc => ({ id: acc.id, name: acc.name, balance: balances[acc.id] ?? 0 })),
+            accounts.map(acc => ({ id: acc.id, name: acc.name, balance: balanceOf(acc.id) })),
             bill.amount,
             settings.currencySymbol
         )

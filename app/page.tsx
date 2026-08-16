@@ -14,7 +14,7 @@ import { useBudget } from './context/BudgetContext'
 import { filterByMonth, calculateBudgetSummary, getMonthYear } from './utils'
 
 export default function DashboardPage() {
-  const { state, balances, progressOfGoal, isLoading, generateRecurringBills, payBill, isBillPaid } = useBudget()
+  const { state, balanceOf, progressOfGoal, isLoading, generateRecurringBills, payBill, isBillPaid } = useBudget()
   const { month: currentMonth, year: currentYear } = getMonthYear()
   const [selectedMonth, setSelectedMonth] = useState(currentMonth)
   const [selectedYear, setSelectedYear] = useState(currentYear)
@@ -105,7 +105,7 @@ export default function DashboardPage() {
             bills={monthlyBills}
             settings={state.settings}
             accounts={state.accounts}
-            balances={balances}
+            balanceOf={balanceOf}
             isBillPaid={isBillPaid}
             onPayBill={payBill}
           />

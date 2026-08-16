@@ -111,6 +111,12 @@ function assertOpeningBalancesStable(before: AppState, after: AppState, action: 
     // account id the app already has. Appending that duplicate is allowed (it is
     // a new entry); rewriting the entry that was already there is not.
     if (action.type === 'IMPORT_DATA') {
+        // Load-bearing: this reads "first occurrence wins" because IMPORT_DATA
+        // APPENDS, so `before.accounts` is a prefix of `after.accounts` and the
+        // first occurrence of an existing id is still the original entry. If
+        // import were ever changed to PREPEND (or to sort), an imported
+        // duplicate would become the first occurrence and this check would
+        // silently compare the import against itself and always pass.
         const wasBefore = firstOpeningBalanceById(before)
         const isAfter = firstOpeningBalanceById(after)
         for (const [id, opening] of wasBefore) {

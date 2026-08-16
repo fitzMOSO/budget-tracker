@@ -50,7 +50,7 @@ const getAccountIcon = (type: Account['type']) => {
 }
 
 export default function AccountsPage() {
-    const { state, balances, balanceOf, addAccount, updateAccount, deleteAccount, canDeleteAccount, deleteTransfer, isLoading } = useBudget()
+    const { state, balanceOf, addAccount, updateAccount, deleteAccount, canDeleteAccount, deleteTransfer, isLoading } = useBudget()
     const { month: currentMonth, year: currentYear } = getMonthYear()
     const [selectedMonth, setSelectedMonth] = useState(currentMonth)
     const [selectedYear, setSelectedYear] = useState(currentYear)
@@ -280,8 +280,8 @@ export default function AccountsPage() {
 
                                         <div className="mt-4">
                                             <p className="text-sm text-gray-500">Balance</p>
-                                            <p className={`text-2xl font-bold ${(balances[account.id] ?? 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                                {formatCurrency(balances[account.id] ?? 0, state.settings)}
+                                            <p className={`text-2xl font-bold ${balanceOf(account.id) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                                {formatCurrency(balanceOf(account.id), state.settings)}
                                             </p>
                                         </div>
 
