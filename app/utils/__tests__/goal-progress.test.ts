@@ -6,7 +6,7 @@
 // a second copy is a copy that drifts: editing a goal used to overwrite it from
 // whatever balance happened to be on screen.
 import { describe, it, expect } from 'vitest'
-import { goalProgress } from '../balances'
+import { goalProgress, totalGoalProgress } from '../balances'
 import { seedState } from '../../context/BudgetContext'
 
 describe('goalProgress', () => {
@@ -68,5 +68,49 @@ describe('goalProgress', () => {
         s.savingsGoals = [{ id: 'g1', name: 'Trap', targetAmount: 10, currentAmount: 0, linkedAccountId: 'constructor' }]
 
         expect(goalProgress(s, s.savingsGoals[0])).toBe(0)
+    })
+})
+
+// "Total saved" is not Σ goalProgress. Two goals can point at the SAME account —
+// "Emergency fund" and "New laptop" both funded out of the one savings account is
+// an ordinary way to use the feature — and that account's balance is one pile of
+// money, not two. Summing per goal counted it twice and reported a total the user
+// does not have. Every screen showing a total must go through this function.
+describe('totalGoalProgress', () => {
+    it('counts an account shared by two goals only once', () => {
+        const s = seedState()
+        s.accounts = [{ id: 'a2', name: 'Savings', type: 'bank', openingBalance: 5000 }]
+        s.savingsGoals = [
+            { id: 'g1', name: 'Emergency', targetAmount: 10000, currentAmount: 0, linkedAccountId: 'a2' },
+            { id: 'g2', name: 'Laptop', targetAmount: 40000, currentAmount: 0, linkedAccountId: 'a2' },
+        ]
+
+        expect(goalProgress(s, s.savingsGoals[0])).toBe(5000)
+        expect(goalProgress(s, s.savingsGoals[1])).toBe(5000)
+        // The pile is 5000, not 10000.
+        expect(totalGoalProgress(s)).toBe(5000)
+    })
+
+    it('adds up distinct accounts and unlinked goals', () => {
+        const s = seedState()
+        s.accounts = [
+            { id: 'a2', name: 'Savings', type: 'bank', openingBalance: 5000 },
+            { id: 'a3', name: 'Wallet', type: 'e-wallet', openingBalance: 700 },
+        ]
+        s.savingsGoals = [
+            { id: 'g1', name: 'Emergency', targetAmount: 10000, currentAmount: 0, linkedAccountId: 'a2' },
+            { id: 'g2', name: 'Trip', targetAmount: 2000, currentAmount: 0, linkedAccountId: 'a3' },
+            { id: 'g3', name: 'Gifts', targetAmount: 1000, currentAmount: 0 },
+        ]
+        s.savingsContributions = [{ id: 'sc1', savingsGoalId: 'g3', amount: 300, date: '2026-08-01' }]
+
+        expect(totalGoalProgress(s)).toBe(6000)
+    })
+
+    it('is zero when there are no goals', () => {
+        const s = seedState()
+        s.savingsGoals = []
+
+        expect(totalGoalProgress(s)).toBe(0)
     })
 })

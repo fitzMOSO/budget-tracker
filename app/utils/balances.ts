@@ -111,6 +111,33 @@ export function goalProgress(state: AppState, goal: SavingsGoal): number {
 }
 
 /**
+ * How much is saved across ALL goals — which is NOT `Σ goalProgress(goal)`.
+ *
+ * Two goals may link to the same account ("emergency fund" and "new laptop",
+ * both funded out of the one savings account). That account holds one pile of
+ * money; counting it once per goal reports a total the user does not have. Each
+ * linked account therefore contributes exactly once, no matter how many goals
+ * point at it. Unlinked goals are disjoint by construction — a contribution
+ * names exactly one goal — so they simply add up.
+ *
+ * Every screen that shows a savings total must call this rather than reducing
+ * over `goalProgress` itself; that reduction was the double-count.
+ */
+export function totalGoalProgress(state: AppState): number {
+    const countedAccounts = new Set<string>()
+    let total = 0
+
+    for (const goal of state.savingsGoals) {
+        if (goal.linkedAccountId) {
+            if (countedAccounts.has(goal.linkedAccountId)) continue
+            countedAccounts.add(goal.linkedAccountId)
+        }
+        total += goalProgress(state, goal)
+    }
+    return total
+}
+
+/**
  * The expense a bill payment created, if any. A bill never moves money itself;
  * the linked expense IS the movement, so it also carries when the bill was paid
  * (`date`) and which account it was paid from (`accountId`).

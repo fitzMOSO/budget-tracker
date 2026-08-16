@@ -24,6 +24,7 @@ import {
     getTodayISO,
     getProgressPercentage,
 } from '../utils'
+import { totalGoalProgress } from '../utils/balances'
 import { showSuccess, showDeleteConfirm } from '../utils/swal'
 import type { SavingsGoal, SavingsContribution } from '../types'
 
@@ -88,7 +89,9 @@ export default function SavingsPage() {
     )
 
     // Calculate totals
-    const totalSaved = state.savingsGoals.reduce((sum, g) => sum + progressOfGoal(g), 0)
+    // NOT `Σ progressOfGoal(g)`: two goals linked to the same account would each
+    // count that account's whole balance. See utils/balances#totalGoalProgress.
+    const totalSaved = totalGoalProgress(state)
     const totalTarget = state.savingsGoals.reduce((sum, g) => sum + g.targetAmount, 0)
     const monthlyTotal = monthlyContributions.reduce((sum, c) => sum + c.amount, 0)
 

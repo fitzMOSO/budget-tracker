@@ -2,7 +2,7 @@
 
 import * as XLSX from 'xlsx'
 import type { AppState } from '../types'
-import { computeBalances, goalProgress, linkedBillExpense } from './balances'
+import { computeBalanceMap, goalProgress, totalGoalProgress, linkedBillExpense } from './balances'
 
 // Helper function to format currency for export
 const formatAmount = (amount: number, symbol: string) => {
@@ -30,8 +30,10 @@ const getCreditCardName = (cardId: string, cards: AppState['creditCards']) => {
 export const exportToExcel = (state: AppState, filename: string = 'budget-tracker-analytics') => {
     const workbook = XLSX.utils.book_new()
     const symbol = state.settings.currencySymbol
-    // Account balances are derived, never stored on the account itself.
-    const balances = computeBalances(state)
+    // Account balances are derived, never stored on the account itself. A Map,
+    // not a record: `balances[id] ?? 0` resolves an unknown id of 'constructor'
+    // or 'toString' through Object.prototype and yields a function.
+    const balances = computeBalanceMap(state)
 
     // ============== OVERVIEW SHEET ==============
     const now = new Date()
@@ -46,8 +48,9 @@ export const exportToExcel = (state: AppState, filename: string = 'budget-tracke
     const paidBillIds = new Set(state.expenses.map(e => e.billId).filter(Boolean) as string[])
     const totalBillsPaid = state.bills.filter(b => paidBillIds.has(b.id)).reduce((sum, b) => sum + b.amount, 0)
     const totalBillsUnpaid = state.bills.filter(b => !paidBillIds.has(b.id)).reduce((sum, b) => sum + b.amount, 0)
-    const totalSavings = state.savingsGoals.reduce((sum, g) => sum + goalProgress(state, g), 0)
-    const totalAccountBalance = state.accounts.reduce((sum, a) => sum + (balances[a.id] ?? 0), 0)
+    // Deduped by linked account: two goals on one account is one pile of money.
+    const totalSavings = totalGoalProgress(state)
+    const totalAccountBalance = state.accounts.reduce((sum, a) => sum + (balances.get(a.id) ?? 0), 0)
     const totalCreditCardDebt = state.creditCardStatements
         .filter(s => s.status !== 'paid')
         .reduce((sum, s) => sum + (s.statementBalance - s.amountPaid), 0)
@@ -69,7 +72,7 @@ export const exportToExcel = (state: AppState, filename: string = 'budget-tracke
         { Metric: '', Value: '' },
         { Metric: '=== ACCOUNT BALANCES ===', Value: '' },
         { Metric: 'Total Account Balance', Value: formatAmount(totalAccountBalance, symbol) },
-        ...state.accounts.map(a => ({ Metric: `  - ${a.name} (${a.type})`, Value: formatAmount(balances[a.id] ?? 0, symbol) })),
+        ...state.accounts.map(a => ({ Metric: `  - ${a.name} (${a.type})`, Value: formatAmount(balances.get(a.id) ?? 0, symbol) })),
         { Metric: '', Value: '' },
         { Metric: '=== ALL-TIME SUMMARY ===', Value: '' },
         { Metric: 'Total Income (All Time)', Value: formatAmount(totalIncome, symbol) },
