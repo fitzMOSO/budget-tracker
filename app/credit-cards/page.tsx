@@ -269,7 +269,10 @@ export default function CreditCardsPage() {
         }
 
         if (editingStatement) {
-            updateStatement({ ...statementData, id: editingStatement.id })
+            // Same wholesale-replace trap: the form has no paidDate field, so
+            // without carrying it over, editing a note erases when the card was
+            // actually paid (the Excel report is the only place it shows).
+            updateStatement({ ...statementData, id: editingStatement.id, paidDate: editingStatement.paidDate })
             showSuccess('Statement updated!')
         } else {
             addStatement(statementData)

@@ -203,10 +203,22 @@ export function budgetReducer(state: AppState, action: Action): AppState {
             return { ...state, expenses: [...state.expenses, action.payload] }
 
         case 'UPDATE_EXPENSE':
+            // Wholesale replace, EXCEPT the bill link. `billId` is a structural
+            // link, not a field of the edit form: it is the only record that a
+            // bill was paid, because `isPaid` is derived from it. An edit form
+            // that has never heard of it would otherwise un-pay the bill and
+            // disarm PAY_BILL's double-pay guard, so the next "Pay Now" debits
+            // the account a second time for one bill.
+            //
+            // Unlinking is still possible — DELETE_BILL, UNPAY_BILL and the
+            // recurring-off branch of UPDATE_BILL all clear it directly. Those
+            // are the paths that mean it; an edit never does.
             return {
                 ...state,
                 expenses: state.expenses.map((e) =>
-                    e.id === action.payload.id ? action.payload : e
+                    e.id === action.payload.id
+                        ? { ...action.payload, billId: action.payload.billId ?? e.billId }
+                        : e
                 ),
             }
 
@@ -221,8 +233,16 @@ export function budgetReducer(state: AppState, action: Action): AppState {
             return { ...state, bills: [...state.bills, action.payload] }
 
         case 'UPDATE_BILL': {
-            const updatedBill = action.payload
-            const existingBill = state.bills.find((b) => b.id === updatedBill.id)
+            const existingBill = state.bills.find((b) => b.id === action.payload.id)
+            // Same reasoning as UPDATE_EXPENSE's billId: recurringSourceId is a
+            // structural link no edit form renders, and it is the only record
+            // that this bill already covers its month. Dropping it makes
+            // GENERATE_RECURRING_BILLS generate a SECOND bill for that month,
+            // which once paid is a second real debit.
+            const updatedBill: Bill = {
+                ...action.payload,
+                recurringSourceId: action.payload.recurringSourceId ?? existingBill?.recurringSourceId,
+            }
 
             // If recurring was turned OFF, only delete FUTURE generated bills (keep current and past)
             if (existingBill?.isRecurring && !updatedBill.isRecurring) {

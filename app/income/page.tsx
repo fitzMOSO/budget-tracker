@@ -96,7 +96,10 @@ export default function IncomePage() {
         }
 
         if (editingIncome) {
-            updateIncome({ ...incomeData, id: editingIncome.id })
+            // This form renders no "recurring" control and UPDATE_INCOME
+            // replaces the record wholesale, so without carrying the flag over,
+            // fixing a typo quietly demotes a recurring income.
+            updateIncome({ ...incomeData, id: editingIncome.id, isRecurring: editingIncome.isRecurring })
             showSuccess('Income updated successfully!')
         } else {
             addIncome(incomeData)

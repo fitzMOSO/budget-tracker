@@ -134,7 +134,10 @@ export default function ExpensesPage() {
         }
 
         if (editingExpense) {
-            updateExpense({ ...expenseData, id: editingExpense.id })
+            // billId is carried explicitly even though UPDATE_EXPENSE also
+            // preserves it: this form has no field for it, and dropping it
+            // un-pays the linked bill, which re-opens the double debit.
+            updateExpense({ ...expenseData, id: editingExpense.id, billId: editingExpense.billId })
             showSuccess('Expense updated successfully!')
         } else {
             // Check if category is marked as a bill category - if so, also record a bill
