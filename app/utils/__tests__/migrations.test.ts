@@ -247,3 +247,47 @@ describe('migrate with seedMissingDefaults disabled', () => {
         expect(migrated.accounts[0].openingBalance).toBe(700)
     })
 })
+
+describe('an account carrying neither balance nor openingBalance', () => {
+    // The orphan guard in computeBalanceMap is correct for a record naming a
+    // DELETED account, but it cannot tell that from an account that exists and
+    // simply has no opening balance: `undefined` seeds the map, every effect
+    // naming the account is swallowed, and the balance reads 0. Zero is worse
+    // than NaN here because it looks like an answer. This file parses untrusted
+    // data, so it normalises rather than passing the hole through.
+    const holeBlob = {
+        ...v1Blob,
+        schemaVersion: CURRENT_SCHEMA_VERSION,
+        accounts: [{ id: 'a1', name: 'Cash', type: 'cash' }],
+        transfers: [],
+    }
+
+    it('still lands every effect on that account', () => {
+        const migrated = migrate(holeBlob)
+
+        // v1Blob's records: +1000 income, -300 expense. The money assertion
+        // first: the failure that matters is the swallowed effects, not the
+        // shape of the field that swallowed them.
+        expect(computeBalances(migrated)).toEqual({ a1: 700 })
+        expect(migrated.accounts[0].openingBalance).toBe(0)
+    })
+
+    it('leaves no account without a numeric opening balance', () => {
+        const migrated = migrate(holeBlob)
+        expect(migrated.accounts.every((a) => Number.isFinite(a.openingBalance))).toBe(true)
+    })
+
+    it('drops a stray stored balance rather than carrying two sources of truth', () => {
+        // An explicit schemaVersion 2 is taken at its word — the effects are
+        // already recorded, so `balance` cannot be re-seeded as an opening
+        // balance without counting them twice. It is a leftover, and it goes.
+        const withStrayBalance = {
+            ...holeBlob,
+            accounts: [{ id: 'a1', name: 'Cash', type: 'cash', openingBalance: 0, balance: 999 }],
+        }
+        const migrated = migrate(withStrayBalance)
+
+        expect(migrated.accounts[0]).not.toHaveProperty('balance')
+        expect(computeBalances(migrated)).toEqual({ a1: 700 })
+    })
+})

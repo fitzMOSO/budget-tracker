@@ -17,10 +17,11 @@ import type { AppState } from '../types'
 import { CURRENT_SCHEMA_VERSION } from './migrations'
 
 /**
- * Bumped when the backup ENVELOPE changes shape. The payload's own schema is
- * reported separately by `schemaVersion`, which is what an importer needs: an
- * envelope that does not say which schema its data is in has to be recognised
- * by sniffing account shapes (see migrations#inferSchemaVersion).
+ * Bumped when the backup ENVELOPE changes shape — not when the data's schema
+ * moves, which `data.schemaVersion` reports. That separation is the point: a
+ * backup that says nothing about which schema its data is in has to be
+ * recognised by sniffing account shapes (see migrations#inferSchemaVersion),
+ * which is what every file this app has written so far requires.
  */
 export const BACKUP_VERSION = '2.0.0'
 
@@ -70,7 +71,19 @@ export const COLLECTION_KEYS = Object.keys(IMPORTED_COLLECTIONS) as CollectionKe
 
 export type BackupEnvelope = {
     version: string
-    /** The schema of `data`, so a future importer never has to sniff shapes. */
+    /**
+     * The schema this BUILD writes, taken from the constant. The data's own
+     * claim about itself is `data.schemaVersion`, which is copied out of the
+     * state — that one is what an importer should branch on, and it is what
+     * saves it from sniffing account shapes.
+     *
+     * They are the same number for any state the app holds, because every state
+     * arrives through migrate(). Keeping them as two fields rather than one is
+     * deliberate: if they ever disagree, the export is evidence of a state that
+     * never got migrated, and overwriting `data.schemaVersion` with the constant
+     * here would erase that evidence and make an importer skip a migration the
+     * data still needs.
+     */
     schemaVersion: number
     exportDate: string
     data: AppState

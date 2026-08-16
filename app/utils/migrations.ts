@@ -231,8 +231,29 @@ export function migrate(raw: unknown, { seedMissingDefaults = true }: MigrateOpt
         // a backup taken before isPaid became derived restores every paid bill
         // as UNPAID next to its own expense, and re-paying debits twice.
         state.expenses = backfillBillExpenses(legacyBills, state.expenses, true)
+        // Normalised, not cast through. An account carrying NEITHER field would
+        // otherwise pass `openingBalance: undefined` into state, where
+        // computeBalanceMap's orphan guard cannot tell it from a record naming
+        // a deleted account: the account seeds the map as `undefined`, every
+        // effect on it is swallowed, and the balance reads 0. Zero is worse
+        // than NaN, because it looks like an answer. `?? 0` is never worse than
+        // the hole, and the guard itself stays exactly as it is — it is what
+        // stops a deleted account being resurrected by a stale reference.
+        //
+        // A stray `balance` is dropped rather than used as the seed: an
+        // explicit current schemaVersion is taken at its word, so the effects
+        // are already recorded and re-seeding from a live balance would count
+        // them twice. (A blob whose accounts really do carry `balance` is
+        // inferred as v1 above and never reaches here.)
         state.accounts = Array.isArray(legacyAccounts) && legacyAccounts.length > 0
-            ? (legacyAccounts as unknown as Account[])
+            ? legacyAccounts.map((a) => ({
+                id: a.id,
+                name: a.name,
+                type: a.type as Account['type'],
+                openingBalance: a.openingBalance ?? 0,
+                color: a.color,
+                isDefault: a.isDefault,
+            }))
             : (seedMissingDefaults ? seedDefaultAccounts() : [])
         return state
     }

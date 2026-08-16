@@ -272,7 +272,15 @@ export default function CreditCardsPage() {
             // Same wholesale-replace trap: the form has no paidDate field, so
             // without carrying it over, editing a note erases when the card was
             // actually paid (the Excel report is the only place it shows).
-            updateStatement({ ...statementData, id: editingStatement.id, paidDate: editingStatement.paidDate })
+            // Carried only while the statement still records a payment, though:
+            // editing one back to pending or overdue must not leave behind the
+            // date of a payment it no longer claims.
+            const stillPaid = statementData.status === 'paid' || statementData.status === 'partial'
+            updateStatement({
+                ...statementData,
+                id: editingStatement.id,
+                paidDate: stillPaid ? editingStatement.paidDate : undefined,
+            })
             showSuccess('Statement updated!')
         } else {
             addStatement(statementData)
