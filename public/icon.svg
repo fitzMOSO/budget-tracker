@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#3b82f6"/>
+      <stop offset="0.5" stop-color="#2563eb"/>
+      <stop offset="1" stop-color="#1d4ed8"/>
+    </linearGradient>
+    <linearGradient id="sheen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.20"/>
+      <stop offset="0.55" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+    <mask id="gap">
+      <rect width="512" height="512" fill="#ffffff"/>
+      <circle cx="312" cy="138" r="62" fill="#000000"/>
+    </mask>
+  </defs>
+  <rect width="512" height="512" rx="115" fill="url(#tile)"/>
+  <rect width="512" height="512" rx="115" fill="url(#sheen)"/>
+  <g transform="translate(0,0) scale(1)">
+    <g transform="translate(15,10)">
+      <g stroke="#ffffff" stroke-linecap="round" fill="none" mask="url(#gap)">
+        <path d="M144 140 V372" stroke-width="48"/>
+        <path d="M162 266 L284 160" stroke-width="46"/>
+        <path d="M162 266 L296 374" stroke-width="46"/>
+      </g>
+      <circle cx="312" cy="138" r="50" fill="#fbbf24"/>
+    </g>
+  </g>
+</svg>

@@ -367,7 +367,7 @@ export default function SettingsPage() {
                     <CardContent>
                         <div className="space-y-2 text-sm text-gray-600">
                             <p>
-                                <span className="font-medium">Budget Tracker</span> - Personal Finance Manager
+                                <span className="font-medium">Kaching</span> - Personal Finance Manager
                             </p>
                             <p>Version: {process.env.NEXT_PUBLIC_APP_VERSION}</p>
                             <p>

@@ -1,7 +1,7 @@
 {
     "id": "/",
-    "name": "Budget Tracker",
-    "short_name": "Budget",
+    "name": "Kaching",
+    "short_name": "Kaching",
     "description": "Track income, expenses, bills, savings, and credit cards with the 50/30/20 budgeting method. Works fully offline; your data never leaves your device.",
     "start_url": "/",
     "scope": "/",

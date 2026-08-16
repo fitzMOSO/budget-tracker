@@ -28,7 +28,7 @@ const SITE_URL = "https://kaching-tracker.fitzdev.studio"
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
-  title: "Budget Tracker - Personal Finance Manager",
+  title: "Kaching — Personal Finance Manager",
   description: "Track your income, expenses, bills, and credit cards with the 50/30/20 budget rule",
   manifest: "/manifest.json",
   alternates: {
@@ -40,7 +40,7 @@ export const metadata: Metadata = {
     type: "website",
     siteName: "FitzDev Studio",
     url: "/",
-    title: "Kaching — Budget Tracker",
+    title: "Kaching — a local-first budget tracker",
     description:
       "A local-first personal finance app built on the 50/30/20 rule. Installs like a native app and works completely offline.",
     locale: "en_US",
@@ -55,7 +55,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Kaching — Budget Tracker",
+    title: "Kaching — a local-first budget tracker",
     description:
       "A local-first personal finance app built on the 50/30/20 rule. Installs like a native app and works completely offline.",
     images: ["/og.png"],
@@ -63,13 +63,17 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "Budget Tracker",
+    title: "Kaching",
   },
   formatDetection: {
     telephone: false,
   },
   icons: {
+    // SVG first: browsers that understand it get the vector and stay crisp at
+    // any density. The PNGs below are the fallback, and `app/favicon.ico`
+    // covers the bare `/favicon.ico` request that some crawlers still make.
     icon: [
+      { url: "/icon.svg", type: "image/svg+xml" },
       { url: "/favicon.png", sizes: "32x32", type: "image/png" },
       { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
       { url: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },
@@ -91,7 +95,7 @@ export default function RootLayout({
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-        <meta name="apple-mobile-web-app-title" content="Budget Tracker" />
+        <meta name="apple-mobile-web-app-title" content="Kaching" />
         <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
       </head>
       <body className={`${inter.variable} antialiased font-sans`}>

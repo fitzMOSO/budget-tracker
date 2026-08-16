@@ -1,4 +1,4 @@
-# Budget Tracker
+# Kaching
 
 A local-first personal finance app built around the 50/30/20 budgeting rule. It installs like a native app, works completely offline, and never sends your financial data anywhere — everything lives in your own browser.
 

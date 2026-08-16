@@ -1,6 +1,6 @@
 # Tech Stack
 
-Kaching Budget Tracker — a Next.js app with **no backend at all**.
+Kaching — a Next.js budget tracker with **no backend at all**.
 
 That is the defining fact of this stack, not a footnote. There is no `app/api/`
 directory, no database client, no auth provider and no server-side rendering at

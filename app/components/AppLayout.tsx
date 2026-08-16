@@ -123,8 +123,10 @@ export function AppLayout({ children, selectedMonth, selectedYear, onMonthChange
                         <Menu className="w-5 h-5" />
                     </button>
                     <div className="flex items-center gap-2">
-                        <Image src="/icons/icon-192.png" alt="Budget Tracker" width={28} height={28} className="rounded-xl shadow-sm" />
-                        <span className="font-bold text-gray-900 tracking-tight">Budget Tracker</span>
+                        {/* The mark carries its own corner radius, so no
+                            `rounded-*` here — that would clip the tile. */}
+                        <Image src="/icon.svg" alt="Kaching" width={28} height={28} className="shadow-sm rounded-md" />
+                        <span className="font-bold text-gray-900 tracking-tight">Kaching</span>
                     </div>
                     <div className="w-10" /> {/* Spacer */}
                 </div>
@@ -150,11 +152,11 @@ export function AppLayout({ children, selectedMonth, selectedYear, onMonthChange
                     <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100">
                         <div className="flex items-center gap-3">
                             <div className="relative">
-                                <Image src="/icons/icon-192.png" alt="Budget Tracker" width={40} height={40} className="rounded-xl shadow-md" />
+                                <Image src="/icon.svg" alt="Kaching" width={40} height={40} className="shadow-md rounded-[9px]" />
                                 <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-500 rounded-full border-2 border-white" />
                             </div>
                             <div>
-                                <span className="text-lg font-bold text-gray-900 tracking-tight">Budget Tracker</span>
+                                <span className="text-lg font-bold text-gray-900 tracking-tight">Kaching</span>
                                 <p className="text-xs text-gray-400">Manage your finances</p>
                             </div>
                         </div>
