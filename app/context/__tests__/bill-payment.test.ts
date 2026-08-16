@@ -135,7 +135,7 @@ describe('paying a bill', () => {
     })
 })
 
-describe('importing a pre-Task-6 backup', () => {
+describe('importing a legacy backup with stored isPaid', () => {
     // Exactly what settings.tsx hands to importData: the `data` object of a
     // backup exported before isPaid became derived.
     const legacyBackup = {

@@ -16,8 +16,8 @@ describe('the exported backup', () => {
         const state = seedState()
         const { data } = buildBackup(state)
 
-        // `transfers` was missing here for the life of this branch, and a
-        // missing collection does not just lose history — balances are derived
+        // `transfers` was once missing from this list, and a missing
+        // collection does not just lose history — balances are derived
         // from these records, so restoring without them moves money.
         expect(Object.keys(data).sort()).toEqual(Object.keys(state).sort())
     })

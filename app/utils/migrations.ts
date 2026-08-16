@@ -25,7 +25,7 @@ export const V1_BACKUP_KEY = 'budget-tracker-data.v1-backup'
 
 export class MigrationError extends Error {}
 
-/** Pre-Task-2 account shape: balance was stored, not derived. */
+/** Legacy account shape: balance was stored, not derived. */
 type LegacyAccount = {
     id: string
     name: string
@@ -37,7 +37,7 @@ type LegacyAccount = {
 }
 
 /**
- * Pre-Task-6 bill shape: isPaid, paidDate and paidFromAccountId were stored on
+ * Legacy bill shape: isPaid, paidDate and paidFromAccountId were stored on
  * the bill. They are all derived from the linked expense now and no longer exist
  * on the live Bill interface. Migration input is the OLD shape by definition, so
  * it gets its own local type, independent of whatever Bill looks like today.
@@ -70,9 +70,8 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 
 /**
  * Recognisable means "this is plausibly a budget-tracker blob", not "this is
- * a complete one". A blob missing `accounts` or `categories` (the pre-Task-4
- * ad-hoc repair branch in BudgetContext's load effect handled exactly this
- * case for `accounts`) is still this app's data — it gets repaired below.
+ * a complete one". A blob missing `accounts` or `categories` is still this
+ * app's data — it gets repaired below.
  * An object with none of the known keys at all (e.g. `{ nonsense: true }`)
  * carries no evidence it's ours, so it throws instead of silently becoming
  * an empty/seeded state that could mask real data loss upstream (a bad
@@ -213,10 +212,9 @@ export function migrate(raw: unknown, { seedMissingDefaults = true }: MigrateOpt
         settings: (raw.settings as AppState['settings'] | undefined) ?? DEFAULT_SETTINGS,
     }
 
-    // Already-migrated data still needs the "missing accounts" repair (the
-    // pre-Task-4 ad-hoc branch in the load effect handled this unconditionally,
-    // regardless of schema version) but must otherwise pass through unchanged
-    // to keep migrate() idempotent.
+    // Already-migrated data still needs the "missing accounts" repair, which
+    // applies regardless of schema version, but must otherwise pass through
+    // unchanged to keep migrate() idempotent.
     if (inferSchemaVersion(raw, legacyAccounts) === CURRENT_SCHEMA_VERSION) {
         // Bills on this schema may still carry the old isPaid flag (toBill above
         // stripped it). Re-attach the link to the expense that payment already

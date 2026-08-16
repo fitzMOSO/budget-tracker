@@ -3,7 +3,7 @@
 // Why this file exists.
 //
 // The JSON backup is the only copy of a user's data that leaves the device, and
-// the spec's binding constraint is "never destroy user data". A backup that
+// the binding constraint is "never destroy user data". A backup that
 // omits a collection does not merely lose history in the derived-balance model:
 // balances ARE the records, so a dropped transfer MOVES MONEY BACK, silently
 // and permanently, on the one operation the user performs precisely because

@@ -522,7 +522,7 @@ export function budgetReducer(state: AppState, action: Action): AppState {
             // A restore is externally controlled JSON that may predate the
             // current schema, so it goes through the SAME migration the stored
             // blob does rather than a second, drifting copy of it. That is what
-            // turns a pre-branch account carrying `{ balance: 700 }` into a real
+            // turns a legacy account carrying `{ balance: 700 }` into a real
             // `openingBalance` — imported verbatim it was `undefined`, which
             // reads as 0 and drops every effect on that account.
             //

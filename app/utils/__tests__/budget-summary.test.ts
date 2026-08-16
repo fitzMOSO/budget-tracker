@@ -70,7 +70,7 @@ describe('calculateBudgetSummary', () => {
   // Documents current behaviour, which is arguably surprising: savingsActual is
   // sourced from savingsContributions only. An Expense tagged
   // expenseType: 'savings' is counted in NO bucket, so it affects neither
-  // totalExpenses nor remaining. See the follow-up note in the plan.
+  // totalExpenses nor remaining.
   it('ignores expenses tagged as savings when computing totals', () => {
     const s = calculateBudgetSummary([income(10000)], [expense(2000, 'savings')], [])
     expect(s.savingsActual).toBe(0)

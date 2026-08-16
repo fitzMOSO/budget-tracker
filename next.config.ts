@@ -4,8 +4,7 @@ import pkg from "./package.json" with { type: "json" };
 const nextConfig: NextConfig = {
   // Static export: this is a local-first app with no server component to its
   // data model, so every route is a static document and the service worker can
-  // precache the whole site. (This originally existed to feed Capacitor's
-  // webDir; Capacitor has since been removed, but the choice still stands.)
+  // precache the whole site.
   output: 'export',
   // Surfaced in the Settings > About card so the displayed version cannot
   // drift from the real one.

@@ -30,8 +30,8 @@ describe('goalProgress', () => {
     })
 
     it('ignores the stored currentAmount entirely', () => {
-        // The drift this removes: Task 5 deleted the re-sync blocks, so a stored
-        // currentAmount has been going stale ever since. It must not be read.
+        // Nothing re-syncs the stored currentAmount, so it goes stale the moment
+        // the linked account or the contributions move. It must not be read.
         const s = seedState()
         s.accounts = [{ id: 'a2', name: 'Savings', type: 'bank', openingBalance: 5000 }]
         s.savingsGoals = [

@@ -20,18 +20,9 @@ export const viewport: Viewport = {
 }
 
 /**
- * The deployed origin.
- *
- * `metadataBase` is what lets every relative URL below resolve to an absolute
- * one. Without it Next emits the paths as-is, and `og:image` must be absolute —
- * crawlers drop a relative value silently rather than resolving it against the
- * page, so the card renders with no thumbnail and nothing warns you. Next does
- * log a build-time warning for a missing metadataBase, but it is easy to miss
- * in a passing build.
- *
- * Hardcoded rather than read from an env var because this is a static export
- * (`output: 'export'`) — the value is baked into the HTML at build time either
- * way, so an env var would add indirection without adding flexibility.
+ * The deployed origin. `metadataBase` is what resolves the relative `/og.png`
+ * below into the absolute URL crawlers require; without it the link-preview
+ * card silently loses its image.
  */
 const SITE_URL = "https://kaching-tracker.fitzdev.studio"
 
@@ -43,16 +34,8 @@ export const metadata: Metadata = {
   alternates: {
     canonical: "/",
   },
-  /*
-   * Link preview card. The image is generated in the portfolio repo
-   * (`frontend/scripts/generate-og.mjs`) and copied here as `public/og.png`,
-   * so every FitzDev property shares one visual system instead of drifting.
-   *
-   * 1200x630 is the one size that renders large on Facebook, LinkedIn, Slack
-   * and iMessage alike; anything under 600 wide is treated as a small
-   * thumbnail. PNG, not the WebP/AVIF this app otherwise prefers — several
-   * major crawlers still do not decode either for og:image.
-   */
+  // Link preview card. 1200x630 PNG: smaller renders as a thumbnail, and
+  // several major crawlers still can't decode WebP/AVIF for og:image.
   openGraph: {
     type: "website",
     siteName: "FitzDev Studio",

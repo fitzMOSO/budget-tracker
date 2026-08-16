@@ -10,7 +10,7 @@
 //   * Expense.billId is the ONLY record that a bill was paid — `isPaid` is
 //     derived from it. Dropping it un-pays the bill AND disarms the double-pay
 //     guard, so the next "Pay Now" debits the account a second time for one
-//     bill. That is the exact double-debit this branch exists to eliminate.
+//     bill — one bill, two real debits.
 //   * Bill.recurringSourceId is the ONLY record that a bill was generated from
 //     a recurring source. Dropping it makes GENERATE_RECURRING_BILLS stop
 //     recognising that this month is already covered, so it generates a
