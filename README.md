@@ -6,6 +6,9 @@ A local-first personal finance app built around the 50/30/20 budgeting rule. It 
 
 <!-- TODO: replace with a screen recording of the dashboard + offline mode -->
 
+> **Portfolio demo, not open source.** The code is readable as a work sample and
+> clonable to run the demo locally; it is not offered for reuse. See [LICENSE](LICENSE).
+
 ## Why local-first
 
 Budgeting data is about as personal as it gets. Most trackers answer that by asking you to trust a server; this one answers it by not having one.
@@ -38,6 +41,8 @@ The trade-off is deliberate and worth stating plainly: **your data is tied to on
 | Hosting | Netlify (static) |
 
 No backend, no database, no state-management library.
+
+Full detail, with exact pins, in [STACK.md](STACK.md).
 
 ## Getting started
 
@@ -145,4 +150,9 @@ Stated rather than hidden:
 
 ## License
 
-MIT
+**Portfolio demo, not open source.** The code is published so it can be read as a
+work sample, and cloned to run the demo locally. It is not offered for reuse.
+See [LICENSE](LICENSE).
+
+(This section previously said "MIT" while no LICENSE file existed — the claim was
+never backed by anything in the repository.)

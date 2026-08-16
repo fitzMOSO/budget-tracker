@@ -8,6 +8,7 @@
     "build:web": "next build && workbox injectManifest workbox.config.js",
     "start": "next start",
     "lint": "eslint",
+    "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest"
   },
