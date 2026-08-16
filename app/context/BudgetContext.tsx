@@ -26,7 +26,8 @@ import {
     DEFAULT_SETTINGS as defaultSettings,
     DEFAULT_ACCOUNTS as defaultAccounts,
 } from '../types'
-import { migrate, relinkImportedBills, CURRENT_SCHEMA_VERSION, V1_BACKUP_KEY } from '../utils/migrations'
+import { migrate, CURRENT_SCHEMA_VERSION, V1_BACKUP_KEY } from '../utils/migrations'
+import { COLLECTION_KEYS } from '../utils/backup'
 import { computeBalanceMap, goalProgress } from '../utils/balances'
 import { buildBillExpense } from '../utils/bill-payment'
 import { checkDelete, cascadeDelete, type DeleteCheck } from '../utils/integrity'
@@ -518,24 +519,38 @@ export function budgetReducer(state: AppState, action: Action): AppState {
 
         // Import
         case 'IMPORT_DATA': {
-            const newState = { ...state }
-            // A backup exported before isPaid became derived would otherwise
-            // restore every paid bill as unpaid, sitting next to the expense its
-            // payment created — and re-paying it would debit the account twice.
-            // Scoped to the imported pair so it cannot claim existing expenses.
-            const relinked = relinkImportedBills(action.payload.bills, action.payload.expenses)
-            if (action.payload.categories) newState.categories = [...state.categories, ...action.payload.categories]
-            if (action.payload.accounts) newState.accounts = [...state.accounts, ...action.payload.accounts]
-            if (action.payload.incomes) newState.incomes = [...state.incomes, ...action.payload.incomes]
-            if (action.payload.expenses) newState.expenses = [...state.expenses, ...relinked.expenses]
-            if (action.payload.bills) newState.bills = [...state.bills, ...relinked.bills]
-            if (action.payload.creditCards) newState.creditCards = [...state.creditCards, ...action.payload.creditCards]
-            if (action.payload.creditCardStatements)
-                newState.creditCardStatements = [...state.creditCardStatements, ...action.payload.creditCardStatements]
-            if (action.payload.savingsGoals) newState.savingsGoals = [...state.savingsGoals, ...action.payload.savingsGoals]
-            if (action.payload.savingsContributions)
-                newState.savingsContributions = [...state.savingsContributions, ...action.payload.savingsContributions]
-            return newState
+            // A restore is externally controlled JSON that may predate the
+            // current schema, so it goes through the SAME migration the stored
+            // blob does rather than a second, drifting copy of it. That is what
+            // turns a pre-branch account carrying `{ balance: 700 }` into a real
+            // `openingBalance` — imported verbatim it was `undefined`, which
+            // reads as 0 and drops every effect on that account.
+            //
+            // Defaults are deliberately not seeded: this MERGES into a state
+            // that already has accounts and categories.
+            let imported: AppState
+            try {
+                imported = migrate(action.payload, { seedMissingDefaults: false })
+            } catch {
+                // Nothing recognisable in the payload. A reducer must not throw
+                // — the caller validated the envelope, not its contents — and
+                // importing nothing is what this did before.
+                return state
+            }
+
+            // Every collection, by an exhaustive key list rather than one
+            // `if (payload.X)` per collection. That hand-maintained list is how
+            // `transfers` and `monthlyBudgets` came to be silently discarded on
+            // restore; a collection added to AppState now fails to compile in
+            // utils/backup.ts instead.
+            const merged: AppState = { ...state }
+            for (const key of COLLECTION_KEYS) {
+                // One localised cast: the compiler will not relate two indexed
+                // accesses through a union key, though both index the same
+                // interface with the same key.
+                ;(merged as unknown as Record<string, unknown[]>)[key] = [...state[key], ...imported[key]]
+            }
+            return merged
         }
 
         default:

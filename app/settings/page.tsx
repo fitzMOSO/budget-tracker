@@ -9,6 +9,7 @@ import { getMonthYear } from '../utils'
 import { exportToExcel } from '../utils/excel'
 import { showSuccess, showError, showDeleteConfirm, showConfirm } from '../utils/swal'
 import { buildDemoData } from '../utils/demo-data'
+import { buildBackup } from '../utils/backup'
 
 const CURRENCIES = [
     { value: 'PHP', label: 'Philippine Peso (₱)', symbol: '₱' },
@@ -115,24 +116,11 @@ export default function SettingsPage() {
     // Export Backup (JSON)
     const handleExportBackup = () => {
         try {
-            const backupData = {
-                version: '1.0.0',
-                exportDate: new Date().toISOString(),
-                data: {
-                    categories: state.categories,
-                    accounts: state.accounts,
-                    incomes: state.incomes,
-                    expenses: state.expenses,
-                    bills: state.bills,
-                    creditCards: state.creditCards,
-                    creditCardStatements: state.creditCardStatements,
-                    savingsGoals: state.savingsGoals,
-                    savingsContributions: state.savingsContributions,
-                    monthlyBudgets: state.monthlyBudgets,
-                    settings: state.settings,
-                },
-            }
-            const dataStr = JSON.stringify(backupData, null, 2)
+            // Deliberately not a field list written out here: the one that used
+            // to live at this spot silently omitted `transfers`, which made a
+            // restore move money back. utils/backup.ts derives the payload from
+            // AppState's own keys, so a new collection cannot be forgotten.
+            const dataStr = JSON.stringify(buildBackup(state), null, 2)
             const blob = new Blob([dataStr], { type: 'application/json' })
             const url = URL.createObjectURL(blob)
             const link = document.createElement('a')
@@ -317,7 +305,7 @@ export default function SettingsPage() {
                                 />
                             </div>
                             <p className="text-sm text-gray-500 mt-2">
-                                Export all your data (accounts, income, expenses, bills, credit cards, savings, categories, and settings) as a backup file.
+                                Export all your data (accounts, income, expenses, transfers, bills, credit cards, savings, categories, and settings) as a backup file.
                                 You can restore this backup later to recover your data.
                             </p>
                         </div>

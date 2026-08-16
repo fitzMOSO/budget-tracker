@@ -155,31 +155,36 @@ function backfillBillExpenses(bills: LegacyBill[], expenses: Expense[], linkOnly
 }
 
 /**
- * Normalises a bills+expenses pair that may predate derived `isPaid` — used by
- * IMPORT_DATA, which otherwise writes a backup straight into state.
+ * The schema version of a blob that does not say what it is.
  *
- * A backup exported before this change carries `isPaid` on the bill and an
- * unlinked auto-created expense. Imported as-is, every previously paid bill
- * comes back UNPAID next to its own expense, so paying it again debits the
- * account a second time.
- *
- * Deliberately link-only, and deliberately scoped to the imported set: it must
- * not invent an expense for money that never moved, and must not let an imported
- * bill adopt an expense the user already had in the app.
+ * Backups exported before `schemaVersion` was stamped into the envelope have to
+ * be recognised by shape, and the account is the reliable tell: v1 stored a live
+ * `balance`, v2 stores a seed `openingBalance`. The asymmetry matters — guessing
+ * v1 for a v2 blob would subtract every recorded effect out of an opening
+ * balance that was never a live balance, silently moving money — so v1 is only
+ * inferred on POSITIVE evidence: an account that actually carries `balance`.
+ * With no accounts there is no money to reconcile and nothing to infer from, so
+ * the safe, non-rewriting v2 path is taken.
  */
-export function relinkImportedBills(
-    rawBills: unknown,
-    rawExpenses: unknown,
-): { bills: Bill[]; expenses: Expense[] } {
-    const bills = Array.isArray(rawBills) ? (rawBills as LegacyBill[]) : []
-    const expenses = Array.isArray(rawExpenses) ? (rawExpenses as Expense[]) : []
-    return {
-        bills: bills.map(toBill),
-        expenses: backfillBillExpenses(bills, expenses, true),
-    }
+function inferSchemaVersion(raw: Record<string, unknown>, accounts: LegacyAccount[] | undefined): number {
+    if (typeof raw.schemaVersion === 'number') return raw.schemaVersion
+    const looksV1 = Array.isArray(accounts) && accounts.some((a) => isPlainObject(a) && 'balance' in a)
+    return looksV1 ? 1 : CURRENT_SCHEMA_VERSION
 }
 
-export function migrate(raw: unknown): AppState {
+export type MigrateOptions = {
+    /**
+     * Whether a blob with no accounts or no categories gets the app's defaults.
+     *
+     * True for the app's own stored state: a first run (or a blob damaged into
+     * losing them) must come back usable. False for IMPORT_DATA, which MERGES
+     * into a state that already has both — seeding there would inject four
+     * phantom accounts on every restore of a partial backup.
+     */
+    seedMissingDefaults?: boolean
+}
+
+export function migrate(raw: unknown, { seedMissingDefaults = true }: MigrateOptions = {}): AppState {
     if (!isPlainObject(raw)) {
         throw new MigrationError('Stored data is not an object')
     }
@@ -191,7 +196,9 @@ export function migrate(raw: unknown): AppState {
     const legacyBills = Array.isArray(raw.bills) ? (raw.bills as LegacyBill[]) : []
 
     const state: AppState = {
-        categories: Array.isArray(raw.categories) ? (raw.categories as Category[]) : seedDefaultCategories(),
+        categories: Array.isArray(raw.categories)
+            ? (raw.categories as Category[])
+            : (seedMissingDefaults ? seedDefaultCategories() : []),
         accounts: [], // filled in below, after opening balances (or straight passthrough) are known
         incomes: (raw.incomes as AppState['incomes']) ?? [],
         expenses: (raw.expenses as AppState['expenses']) ?? [],
@@ -210,15 +217,23 @@ export function migrate(raw: unknown): AppState {
     // pre-Task-4 ad-hoc branch in the load effect handled this unconditionally,
     // regardless of schema version) but must otherwise pass through unchanged
     // to keep migrate() idempotent.
-    if (raw.schemaVersion === CURRENT_SCHEMA_VERSION) {
+    if (inferSchemaVersion(raw, legacyAccounts) === CURRENT_SCHEMA_VERSION) {
         // Bills on this schema may still carry the old isPaid flag (toBill above
         // stripped it). Re-attach the link to the expense that payment already
         // created so the bill keeps reading as paid; never add a new expense
         // here, which would debit money that has already moved.
+        //
+        // This is also the path a RESTORED BACKUP takes (IMPORT_DATA migrates
+        // its payload), and it is the reason the backfill is link-only and
+        // scoped to the blob's own bills+expenses: restoring must not invent an
+        // expense for money that never moved, and an imported bill must not
+        // adopt an expense the user already had in the app. Without the relink,
+        // a backup taken before isPaid became derived restores every paid bill
+        // as UNPAID next to its own expense, and re-paying debits twice.
         state.expenses = backfillBillExpenses(legacyBills, state.expenses, true)
         state.accounts = Array.isArray(legacyAccounts) && legacyAccounts.length > 0
             ? (legacyAccounts as unknown as Account[])
-            : seedDefaultAccounts()
+            : (seedMissingDefaults ? seedDefaultAccounts() : [])
         return state
     }
 
@@ -228,7 +243,7 @@ export function migrate(raw: unknown): AppState {
 
     // 2. Derive opening balances so today's displayed numbers do not move.
     if (!Array.isArray(legacyAccounts) || legacyAccounts.length === 0) {
-        state.accounts = seedDefaultAccounts()
+        state.accounts = seedMissingDefaults ? seedDefaultAccounts() : []
         return state
     }
 
@@ -243,16 +258,22 @@ export function migrate(raw: unknown): AppState {
             isDefault: a.isDefault,
         })),
     }
-    const sums: Record<string, number> = {}
+    // A Map, not a Record — and in this file above all others, because it is the
+    // one that parses untrusted data. `sums['constructor']` on a plain object
+    // finds Object.prototype.constructor, so `?? 0` never fires and
+    // `balance - sums[id]` is NaN even with zero effects; `sums['__proto__'] = n`
+    // is discarded outright. A NaN openingBalance serialises to null and poisons
+    // that account's derived balance with no way back.
+    const sums = new Map<string, number>()
     for (const effect of allEffects(probe)) {
-        sums[effect.accountId] = (sums[effect.accountId] ?? 0) + effect.delta
+        sums.set(effect.accountId, (sums.get(effect.accountId) ?? 0) + effect.delta)
     }
 
     state.accounts = legacyAccounts.map((a) => ({
         id: a.id,
         name: a.name,
         type: a.type as Account['type'],
-        openingBalance: (a.balance ?? a.openingBalance ?? 0) - (sums[a.id] ?? 0),
+        openingBalance: (a.balance ?? a.openingBalance ?? 0) - (sums.get(a.id) ?? 0),
         color: a.color,
         isDefault: a.isDefault,
     }))

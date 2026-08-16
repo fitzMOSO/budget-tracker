@@ -168,3 +168,82 @@ describe('migrate v1 -> v2', () => {
         expect(migrated.expenses.filter((e) => e.id.startsWith('mig-'))).toHaveLength(0)
     })
 })
+
+describe('account ids that collide with Object.prototype', () => {
+    // migrate() is the one function that parses untrusted persisted data, and
+    // it used to accumulate effects into a plain object keyed by account id.
+    // `sums['constructor']` then resolved to Object.prototype.constructor, so
+    // `?? 0` never fired and `balance - sums[id]` was NaN even with no effects
+    // at all; `sums['__proto__'] = n` was discarded outright. A NaN
+    // openingBalance serialises to null and is unrecoverable.
+    const prototypeKeys = ['constructor', '__proto__', 'toString', 'valueOf', 'hasOwnProperty'] as const
+
+    it.each(prototypeKeys)('derives a finite opening balance for an account id of %s', (id) => {
+        const blob = {
+            ...v1Blob,
+            accounts: [{ id, name: 'Cash', type: 'cash', balance: 1000 }],
+            incomes: [],
+            expenses: [],
+        }
+        const migrated = migrate(blob)
+
+        expect(migrated.accounts).toHaveLength(1)
+        expect(Number.isFinite(migrated.accounts[0].openingBalance)).toBe(true)
+        expect(migrated.accounts[0].openingBalance).toBe(1000)
+        expect(computeBalances(migrated)[id]).toBe(1000)
+    })
+
+    it('subtracts real effects from a prototype-key account rather than a prototype member', () => {
+        const blob = {
+            ...v1Blob,
+            accounts: [{ id: 'constructor', name: 'Cash', type: 'cash', balance: 700 }],
+            incomes: [{ id: 'i1', description: 'Pay', amount: 1000, date: '2026-08-01', categoryId: 'c1', accountId: 'constructor' }],
+            expenses: [{ id: 'e1', description: 'Food', amount: 300, date: '2026-08-02', categoryId: 'c1', accountId: 'constructor', expenseType: 'essential' }],
+        }
+        const migrated = migrate(blob)
+
+        // 700 displayed = opening + 1000 - 300  =>  opening = 0, still 700 today.
+        expect(migrated.accounts[0].openingBalance).toBe(0)
+        expect(computeBalances(migrated).constructor).toBe(700)
+    })
+})
+
+describe('a blob that carries no schemaVersion', () => {
+    // Backups exported before the version was stamped into the envelope have to
+    // be recognised by shape. Guessing wrong in the v1 direction subtracts every
+    // effect out of an opening balance that was never a live balance.
+    it('treats accounts carrying `balance` as v1 and derives opening balances', () => {
+        const migrated = migrate(v1Blob)
+        expect(migrated.accounts[0].openingBalance).toBe(0)
+        expect(computeBalances(migrated)).toEqual({ a1: 700 })
+    })
+
+    it('treats accounts carrying `openingBalance` as current and leaves them alone', () => {
+        const v2Shaped = {
+            ...v1Blob,
+            accounts: [{ id: 'a1', name: 'Cash', type: 'cash', openingBalance: 0 }],
+        }
+        const migrated = migrate(v2Shaped)
+
+        expect(migrated.accounts[0].openingBalance).toBe(0)
+        expect(computeBalances(migrated)).toEqual({ a1: 700 })
+    })
+})
+
+describe('migrate with seedMissingDefaults disabled', () => {
+    // What IMPORT_DATA uses: a restore MERGES into a state that already has
+    // accounts and categories, so seeding here would inject phantom accounts.
+    it('adds no default accounts or categories', () => {
+        const migrated = migrate({ expenses: [] }, { seedMissingDefaults: false })
+        expect(migrated.accounts).toEqual([])
+        expect(migrated.categories).toEqual([])
+    })
+
+    it('still repairs the record shapes it is given', () => {
+        const migrated = migrate(
+            { accounts: [{ id: 'a1', name: 'Cash', type: 'cash', balance: 700 }], incomes: [], expenses: [] },
+            { seedMissingDefaults: false },
+        )
+        expect(migrated.accounts[0].openingBalance).toBe(700)
+    })
+})
