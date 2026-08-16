@@ -147,22 +147,30 @@ export function calculateCreditCardBalance(statement: CreditCardStatement): numb
 }
 
 /**
- * The one definition of "this is a payment amount", shared by every screen that
- * records one. The credit-card page and the dashboard summary each carried their
- * own near-miss version; duplicated guards drifting apart is the bug class the
- * derived-balance refactor exists to remove.
+ * The one definition of "this is an amount of money the user just typed",
+ * shared by every screen that records one — payments, income, expenses and
+ * transfers alike. Each screen used to carry its own near-miss version;
+ * duplicated guards drifting apart is the bug class the derived-balance
+ * refactor exists to remove.
  *
  * `Number.isFinite` is load-bearing, not defensive noise: callers pass
  * `parseFloat(<text input>)`, an empty field yields `NaN`, and `NaN <= 0` is
- * false — so a bare `amount <= 0` check lets NaN through into `amountPaid`,
- * where it becomes a NaN debit on the paying account's derived balance.
+ * false — so a bare `amount <= 0` check lets NaN through into a record's
+ * `amount`. That NaN then becomes an effect, and the effect is summed into the
+ * account's derived balance, which reads `NaN` from then on. Nothing downstream
+ * can recover it: the record's own amount is unreadable, so the only fix is to
+ * find and delete the record. This predicate is the last line of defence.
  */
-export function isValidPayment(n: number): boolean {
+export function isValidAmount(n: number): boolean {
   return Number.isFinite(n) && n > 0;
 }
 
-/** The single wording for a rejected payment amount, so both screens agree. */
-export const INVALID_PAYMENT_MESSAGE = 'Enter a payment amount greater than zero.';
+/**
+ * The single wording for a rejected amount, so every screen agrees. Deliberately
+ * says "amount" and not "payment": the same guard now fronts income, expense and
+ * transfer forms, where "payment" would be the wrong word.
+ */
+export const INVALID_AMOUNT_MESSAGE = 'Enter an amount greater than zero.';
 
 /**
  * `isPaid` is passed in because a bill no longer stores it — it is derived from

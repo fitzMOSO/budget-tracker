@@ -5,7 +5,7 @@ import { useSearchParams, useRouter } from 'next/navigation'
 import { TrendingUp, TrendingDown, ArrowLeftRight, Home } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardContent, Input, Select, Button } from '../components/ui'
 import { useBudget } from '../context/BudgetContext'
-import { formatCurrency, getTodayISO } from '../utils'
+import { formatCurrency, getTodayISO, isValidAmount, INVALID_AMOUNT_MESSAGE } from '../utils'
 import { showSuccess, showError } from '../utils/swal'
 
 function QuickAddContent() {
@@ -73,8 +73,8 @@ function QuickAddContent() {
         e.preventDefault()
 
         const amount = parseFloat(incomeData.amount)
-        if (amount <= 0) {
-            showError('Amount must be greater than 0')
+        if (!isValidAmount(amount)) {
+            showError(INVALID_AMOUNT_MESSAGE)
             return
         }
 
@@ -98,8 +98,8 @@ function QuickAddContent() {
         e.preventDefault()
 
         const amount = parseFloat(expenseData.amount)
-        if (amount <= 0) {
-            showError('Amount must be greater than 0')
+        if (!isValidAmount(amount)) {
+            showError(INVALID_AMOUNT_MESSAGE)
             return
         }
 
@@ -134,8 +134,8 @@ function QuickAddContent() {
         }
 
         const amount = parseFloat(transferData.amount)
-        if (amount <= 0) {
-            showError('Amount must be greater than 0')
+        if (!isValidAmount(amount)) {
+            showError(INVALID_AMOUNT_MESSAGE)
             return
         }
 

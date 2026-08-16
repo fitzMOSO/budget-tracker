@@ -4,7 +4,7 @@ import React, { useState } from 'react'
 import { TrendingUp, TrendingDown, ArrowLeftRight, Plus } from 'lucide-react'
 import { Modal, Input, Select, Button } from './ui'
 import { useBudget } from '../context/BudgetContext'
-import { formatCurrency, getTodayISO } from '../utils'
+import { formatCurrency, getTodayISO, isValidAmount, INVALID_AMOUNT_MESSAGE } from '../utils'
 import { showSuccess, showError } from '../utils/swal'
 
 export function QuickActions() {
@@ -74,8 +74,8 @@ export function QuickActions() {
         }
 
         const amount = parseFloat(transferData.amount)
-        if (amount <= 0) {
-            showError('Amount must be greater than 0')
+        if (!isValidAmount(amount)) {
+            showError(INVALID_AMOUNT_MESSAGE)
             return
         }
 
@@ -119,8 +119,8 @@ export function QuickActions() {
         e.preventDefault()
 
         const amount = parseFloat(quickIncomeData.amount)
-        if (amount <= 0) {
-            showError('Amount must be greater than 0')
+        if (!isValidAmount(amount)) {
+            showError(INVALID_AMOUNT_MESSAGE)
             return
         }
 
@@ -165,8 +165,8 @@ export function QuickActions() {
         e.preventDefault()
 
         const amount = parseFloat(quickExpenseData.amount)
-        if (amount <= 0) {
-            showError('Amount must be greater than 0')
+        if (!isValidAmount(amount)) {
+            showError(INVALID_AMOUNT_MESSAGE)
             return
         }
 

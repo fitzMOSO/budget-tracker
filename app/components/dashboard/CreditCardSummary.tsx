@@ -3,7 +3,7 @@
 import React, { useState } from 'react'
 import { CreditCard as CreditCardIcon, AlertCircle, CheckCircle2, Clock } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardContent, Badge, ProgressBar, Modal, Input, Select, Button } from '../ui'
-import { formatCurrency, formatDate, calculateCreditCardBalance, isValidPayment, INVALID_PAYMENT_MESSAGE } from '../../utils'
+import { formatCurrency, formatDate, calculateCreditCardBalance, isValidAmount, INVALID_AMOUNT_MESSAGE } from '../../utils'
 import type { CreditCard, CreditCardStatement, AppSettings, PaymentStatus, Account } from '../../types'
 import { useBudget } from '../../context/BudgetContext'
 import { showSuccess, showError } from '../../utils/swal'
@@ -65,8 +65,8 @@ export function CreditCardSummary({
         if (!paymentStatement) return
 
         const additionalPayment = parseFloat(paymentAmount)
-        if (!isValidPayment(additionalPayment)) {
-            showError(INVALID_PAYMENT_MESSAGE)
+        if (!isValidAmount(additionalPayment)) {
+            showError(INVALID_AMOUNT_MESSAGE)
             return
         }
 
