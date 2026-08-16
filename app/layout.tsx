@@ -19,10 +19,64 @@ export const viewport: Viewport = {
   viewportFit: 'cover',
 }
 
+/**
+ * The deployed origin.
+ *
+ * `metadataBase` is what lets every relative URL below resolve to an absolute
+ * one. Without it Next emits the paths as-is, and `og:image` must be absolute —
+ * crawlers drop a relative value silently rather than resolving it against the
+ * page, so the card renders with no thumbnail and nothing warns you. Next does
+ * log a build-time warning for a missing metadataBase, but it is easy to miss
+ * in a passing build.
+ *
+ * Hardcoded rather than read from an env var because this is a static export
+ * (`output: 'export'`) — the value is baked into the HTML at build time either
+ * way, so an env var would add indirection without adding flexibility.
+ */
+const SITE_URL = "https://kaching-tracker.fitzdev.studio"
+
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
   title: "Budget Tracker - Personal Finance Manager",
   description: "Track your income, expenses, bills, and credit cards with the 50/30/20 budget rule",
   manifest: "/manifest.json",
+  alternates: {
+    canonical: "/",
+  },
+  /*
+   * Link preview card. The image is generated in the portfolio repo
+   * (`frontend/scripts/generate-og.mjs`) and copied here as `public/og.png`,
+   * so every FitzDev property shares one visual system instead of drifting.
+   *
+   * 1200x630 is the one size that renders large on Facebook, LinkedIn, Slack
+   * and iMessage alike; anything under 600 wide is treated as a small
+   * thumbnail. PNG, not the WebP/AVIF this app otherwise prefers — several
+   * major crawlers still do not decode either for og:image.
+   */
+  openGraph: {
+    type: "website",
+    siteName: "FitzDev Studio",
+    url: "/",
+    title: "Kaching — Budget Tracker",
+    description:
+      "A local-first personal finance app built on the 50/30/20 rule. Installs like a native app and works completely offline.",
+    locale: "en_US",
+    images: [
+      {
+        url: "/og.png",
+        width: 1200,
+        height: 630,
+        alt: "Kaching Budget Tracker — a local-first personal finance app by FitzDev Studio",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Kaching — Budget Tracker",
+    description:
+      "A local-first personal finance app built on the 50/30/20 rule. Installs like a native app and works completely offline.",
+    images: ["/og.png"],
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
